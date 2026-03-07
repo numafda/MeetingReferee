@@ -2,6 +2,19 @@
 
 요구명세서(v1.0) 기반 프로토타입입니다. 현재는 **Deepgram 실시간 연동 전용**으로 동작합니다.
 
+## UI Preview
+### 실시간 모니터링
+![Dashboard Preview](docs/images/dashboard-preview.svg)
+
+### 종료 리포트
+![Report Preview](docs/images/report-preview.svg)
+
+## Demo Flow
+1. 회의 시작 클릭
+2. 마이크 권한 허용
+3. 실시간 자막/화자 지분/이벤트 타임라인 확인
+4. 회의 종료 후 리포트 생성 및 JSON 내보내기
+
 ## 사전 준비 (로그인 필요)
 Deepgram 실시간 연동을 쓰려면 아래가 필요합니다.
 

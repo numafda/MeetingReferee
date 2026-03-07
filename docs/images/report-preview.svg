@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="MeetingReferee report preview">
+  <defs>
+    <linearGradient id="bg2" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0c1324" />
+      <stop offset="100%" stop-color="#111d34" />
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg2)" />
+
+  <rect x="32" y="28" width="1216" height="96" rx="12" fill="#1a2944" stroke="#32476f" />
+  <text x="58" y="66" fill="#a3b8df" font-family="sans-serif" font-size="13" font-weight="700">Meeting Report</text>
+  <text x="58" y="98" fill="#f6f9ff" font-family="sans-serif" font-size="30" font-weight="700">회의 종료 리포트</text>
+  <rect x="1048" y="52" width="92" height="40" rx="10" fill="#4581ff" />
+  <rect x="1150" y="52" width="76" height="40" rx="10" fill="#22345b" />
+
+  <rect x="32" y="138" width="1216" height="166" rx="12" fill="#1f3260" stroke="#4e6ba4" />
+  <text x="58" y="174" fill="#d7e5ff" font-family="sans-serif" font-size="18" font-weight="700">품질 점수</text>
+  <text x="58" y="252" fill="#4ade80" font-family="sans-serif" font-size="68" font-weight="700">84 / 100</text>
+  <text x="58" y="280" fill="#d7e5ff" font-family="sans-serif" font-size="15">특정 인원의 발언 지분이 높아 균형 개선이 필요합니다. (균형 지수: 76)</text>
+
+  <rect x="32" y="320" width="600" height="372" rx="12" fill="#17233b" stroke="#32476f" />
+  <text x="58" y="356" fill="#f6f9ff" font-family="sans-serif" font-size="18" font-weight="700">화자별 지분</text>
+  <rect x="58" y="374" width="548" height="56" rx="8" fill="#11203a" stroke="#2f4266" />
+  <text x="74" y="405" fill="#60a5fa" font-family="sans-serif" font-size="15" font-weight="700">민지</text>
+  <text x="170" y="405" fill="#dbe7ff" font-family="sans-serif" font-size="14">지분 38% · 발언 188.3초 · 12회</text>
+  <rect x="58" y="440" width="548" height="56" rx="8" fill="#11203a" stroke="#2f4266" />
+  <text x="74" y="471" fill="#34d399" font-family="sans-serif" font-size="15" font-weight="700">준호</text>
+  <text x="170" y="471" fill="#dbe7ff" font-family="sans-serif" font-size="14">지분 31% · 발언 153.2초 · 10회</text>
+
+  <rect x="648" y="320" width="600" height="372" rx="12" fill="#17233b" stroke="#32476f" />
+  <text x="674" y="356" fill="#f6f9ff" font-family="sans-serif" font-size="18" font-weight="700">침묵 참여자/비효율 이벤트</text>
+  <rect x="674" y="374" width="548" height="56" rx="8" fill="#11203a" stroke="#2f4266" />
+  <text x="690" y="405" fill="#dbe7ff" font-family="sans-serif" font-size="14">침묵 참여자: 도윤</text>
+  <rect x="674" y="440" width="548" height="56" rx="8" fill="#11203a" stroke="#2f4266" />
+  <text x="690" y="471" fill="#dbe7ff" font-family="sans-serif" font-size="14">반복 발언 패턴: 민지</text>
+</svg>
