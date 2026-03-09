@@ -70,15 +70,17 @@ function parseDeepgramResult(payload) {
   const startSec = firstWord?.start ?? payload.start ?? 0;
   const endSec = lastWord?.end ?? payload.duration ?? startSec;
 
+  const isFinal = Boolean(payload.is_final);
+
   return {
     id: uuid(),
-    speaker_id: extractSpeakerId(alt),
+    speaker_id: isFinal ? extractSpeakerId(alt) : null,
     transcript: text,
     start_time: Math.round(startSec * 1000),
     end_time: Math.round(endSec * 1000),
     duration: Math.max(100, Math.round((endSec - startSec) * 1000)),
     created_at: Date.now(),
-    is_final: Boolean(payload.is_final),
+    is_final: isFinal,
   };
 }
 
@@ -117,8 +119,9 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
       punctuate: "true",
       smart_format: "true",
       interim_results: "true",
-      endpointing: "300",
-      utterance_end_ms: "1000",
+      endpointing: "800",
+      utterance_end_ms: "2000",
+      vad_events: "true",
       encoding: "linear16",
       sample_rate: String(TARGET_SAMPLE_RATE),
       channels: "1",
