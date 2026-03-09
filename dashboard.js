@@ -35,6 +35,7 @@ const state = {
   liveTranscript: "",
   streamMode: "none",
   topicCounts: new Map(),
+  isPaused: false,
 };
 
 const el = {
@@ -50,9 +51,12 @@ const el = {
   activeSpeakerBadge: document.getElementById("active-speaker-badge"),
   liveTranscript: document.getElementById("live-transcript"),
   elapsed: document.getElementById("meeting-elapsed"),
+  pauseBtn: document.getElementById("pause-meeting"),
+  dotLive: document.querySelector(".dot-live"),
 };
 
 document.getElementById("end-meeting").addEventListener("click", endMeeting);
+document.getElementById("pause-meeting").addEventListener("click", togglePause);
 
 // ─── 초기화 ───────────────────────────────────────────────────────────────────
 
@@ -295,6 +299,33 @@ function detectInefficientPattern(lastUtterance) {
 
   if (/[!?]{2,}/.test(lastUtterance.transcript)) {
     pushEvent("warn", `감정 고조 징후: ${speaker.name}`);
+  }
+}
+
+// ─── 일시정지 / 재개 ──────────────────────────────────────────────────────────
+
+function togglePause() {
+  state.isPaused = !state.isPaused;
+
+  if (state.isPaused) {
+    state.stream?.pause();
+    clearInterval(state.elapsedTimer);
+    state.elapsedTimer = null;
+    state.activeSpeakerId = null;
+    state.liveTranscript = "";
+    el.pauseBtn.textContent = "재개";
+    el.pauseBtn.classList.add("is-paused");
+    el.dotLive.classList.add("is-paused");
+    setStatus("일시정지됨 – 마이크 및 분석이 중단됩니다.");
+    renderActiveSpeaker();
+    renderLiveTranscript();
+  } else {
+    state.stream?.resume();
+    startElapsedTimer();
+    el.pauseBtn.textContent = "일시정지";
+    el.pauseBtn.classList.remove("is-paused");
+    el.dotLive.classList.remove("is-paused");
+    setStatus("Deepgram 실시간 분석 재개");
   }
 }
 

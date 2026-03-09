@@ -171,6 +171,22 @@ input {
   border-color: transparent;
 }
 
+.btn-pause {
+  background: var(--warn);
+  border-color: transparent;
+  color: #0b1220;
+}
+
+.btn-pause.is-paused {
+  background: var(--ok);
+  color: #0b1220;
+}
+
+.dot-live.is-paused {
+  background: var(--warn);
+  animation: none;
+}
+
 .hint,
 .muted-copy,
 .topbar-live-copy {
