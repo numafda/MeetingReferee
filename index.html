@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MeetingReferee Prototype</title>
+    <title>MeetingReferee</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -23,7 +23,7 @@
         </p>
       </header>
 
-      <section id="lobby-view" class="view view-lobby active">
+      <section class="view view-lobby active">
         <article class="panel-card lobby-card">
           <h2>회의 대기/입장</h2>
           <div class="form-grid">
@@ -42,106 +42,8 @@
           <p class="hint">프로토타입은 모의 Deepgram 스트림으로 동작하며, 1초를 10초로 스케일링합니다.</p>
         </article>
       </section>
-
-      <section id="dashboard-view" class="view view-dashboard hidden">
-        <div class="topbar-live">
-          <div class="topbar-live-status">
-            <span class="dot-live" aria-hidden="true"></span>
-            <div>
-              <p class="topbar-live-title">회의 진행 중</p>
-              <p id="connection-status" class="topbar-live-copy">연결 준비 중...</p>
-            </div>
-          </div>
-          <div class="topbar-live-actions">
-            <p id="meeting-elapsed" class="elapsed-clock">00:00</p>
-            <button id="end-meeting" class="btn btn-danger">회의 종료</button>
-          </div>
-        </div>
-
-        <div class="meeting-layout">
-          <section class="meeting-main">
-            <article class="panel-card meeting-head-card">
-              <div>
-                <h2 id="dashboard-title">실시간 모니터링</h2>
-                <p id="live-transcript" class="live-transcript">실시간 자막: 대기 중...</p>
-              </div>
-              <p id="active-speaker-badge" class="active-speaker-badge">활성 화자: 대기 중</p>
-            </article>
-
-            <div id="speaker-stats" class="speaker-grid"></div>
-
-            <div class="feed-grid">
-              <article class="panel-card">
-                <h3>실시간 발화</h3>
-                <ul id="utterance-feed" class="feed"></ul>
-              </article>
-              <article class="panel-card">
-                <h3>이벤트 타임라인</h3>
-                <ul id="event-feed" class="feed"></ul>
-              </article>
-            </div>
-          </section>
-
-          <aside class="meeting-side">
-            <article class="panel-card">
-              <h3>실시간 발언 비율</h3>
-              <div id="ratio-feed" class="ratio-feed"></div>
-            </article>
-            <article class="panel-card report-balance-card">
-              <h3>균형 지수</h3>
-              <p id="balance-score" class="balance-score">100</p>
-              <p class="muted-copy">점수가 높을수록 발언 균형이 좋습니다.</p>
-            </article>
-            <article class="panel-card">
-              <h3>감정 분석</h3>
-              <div id="sentiment-summary" class="sentiment-summary"></div>
-            </article>
-            <article class="panel-card">
-              <h3>회의 토픽</h3>
-              <div id="topic-cloud" class="topic-cloud"></div>
-            </article>
-          </aside>
-        </div>
-      </section>
-
-      <section id="report-view" class="view view-report hidden">
-        <div class="report-topbar">
-          <div>
-            <p class="hero-eyebrow">Meeting Report</p>
-            <h2>회의 종료 리포트</h2>
-            <p id="report-generated-at" class="muted-copy"></p>
-          </div>
-          <div class="actions">
-            <button id="restart" class="btn btn-primary">새 회의</button>
-            <button id="export-report" class="btn">리포트 내보내기</button>
-          </div>
-        </div>
-
-        <div class="report-grid">
-          <article class="panel-card report-score-card">
-            <h3>품질 점수</h3>
-            <p id="report-score" class="score">0 / 100</p>
-            <p id="report-feedback"></p>
-          </article>
-
-          <article class="panel-card">
-            <h3>화자별 지분</h3>
-            <ul id="report-speakers" class="report-list"></ul>
-          </article>
-
-          <article class="panel-card">
-            <h3>주요 토픽</h3>
-            <div id="report-topics" class="topic-cloud"></div>
-          </article>
-
-          <article class="panel-card">
-            <h3>침묵 참여자/비효율 이벤트</h3>
-            <ul id="report-events" class="report-list"></ul>
-          </article>
-        </div>
-      </section>
     </main>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./lobby.js"></script>
   </body>
 </html>
