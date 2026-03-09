@@ -28,7 +28,6 @@ const state = {
   events: [],
   warnings: [],
   stream: null,
-  latestReport: null,
   activeSpeakerId: null,
   meetingElapsedSec: 0,
   elapsedTimer: null,
@@ -39,11 +38,6 @@ const state = {
 };
 
 const el = {
-  lobby: document.getElementById("lobby-view"),
-  dashboard: document.getElementById("dashboard-view"),
-  report: document.getElementById("report-view"),
-  titleInput: document.getElementById("meeting-title"),
-  participantInput: document.getElementById("meeting-participants"),
   dashboardTitle: document.getElementById("dashboard-title"),
   status: document.getElementById("connection-status"),
   speakerStats: document.getElementById("speaker-stats"),
@@ -56,25 +50,24 @@ const el = {
   activeSpeakerBadge: document.getElementById("active-speaker-badge"),
   liveTranscript: document.getElementById("live-transcript"),
   elapsed: document.getElementById("meeting-elapsed"),
-  reportGeneratedAt: document.getElementById("report-generated-at"),
-  reportScore: document.getElementById("report-score"),
-  reportFeedback: document.getElementById("report-feedback"),
-  reportSpeakers: document.getElementById("report-speakers"),
-  reportTopics: document.getElementById("report-topics"),
-  reportEvents: document.getElementById("report-events"),
 };
 
-document.getElementById("start-meeting").addEventListener("click", () => {
-  startMeeting().catch((error) => {
+document.getElementById("end-meeting").addEventListener("click", endMeeting);
+
+// ─── 초기화 ───────────────────────────────────────────────────────────────────
+
+const config = JSON.parse(sessionStorage.getItem("meetingConfig") || "null");
+if (!config) {
+  window.location.replace("/");
+} else {
+  startMeeting(config).catch((error) => {
     setStatus(`회의 시작 실패: ${error.message}`);
   });
-});
-document.getElementById("end-meeting").addEventListener("click", endMeeting);
-document.getElementById("restart").addEventListener("click", resetToLobby);
-document.getElementById("export-report").addEventListener("click", exportReport);
+}
 
-function parseParticipants(raw) {
-  const count = Math.min(Math.max(parseInt(raw, 10) || 2, 2), 20);
+// ─── 회의 시작 ────────────────────────────────────────────────────────────────
+
+function parseParticipants(count) {
   return Array.from({ length: count }, (_, i) => `참여자 ${i + 1}`);
 }
 
@@ -97,16 +90,8 @@ function createSpeakerStats(participants) {
   );
 }
 
-async function startMeeting() {
-  const title = el.titleInput.value.trim() || "이름 없는 회의";
-  const participants = parseParticipants(el.participantInput.value);
-  if (participants.length < 2) {
-    alert("참여자 수는 최소 2명이어야 합니다.");
-    return;
-  }
-
-  clearTimers();
-  state.stream?.disconnect();
+async function startMeeting({ title, participantCount }) {
+  const participants = parseParticipants(participantCount);
 
   state.meeting = {
     id: String(Date.now()),
@@ -115,18 +100,8 @@ async function startMeeting() {
     startAt: Date.now(),
   };
   state.speakerStats = createSpeakerStats(participants);
-  state.utterances = [];
-  state.events = [];
-  state.warnings = [];
-  state.latestReport = null;
-  state.activeSpeakerId = null;
-  state.liveTranscript = "";
-  state.meetingElapsedSec = 0;
-  state.streamMode = "none";
-  state.topicCounts = new Map();
 
   el.dashboardTitle.textContent = `${title} - 실시간 모니터링`;
-  transitionView("dashboard");
   renderAll();
   startElapsedTimer();
 
@@ -176,10 +151,7 @@ async function fetchDeepgramAuthCredential() {
   return { type: "token", value: payload.access_token };
 }
 
-function setStatus(msg) {
-  const modeLabel = state.streamMode === "deepgram" ? "REALTIME" : "INIT";
-  el.status.textContent = `[${modeLabel}] ${msg} (${new Date().toLocaleTimeString("ko-KR")})`;
-}
+// ─── 타이머 ───────────────────────────────────────────────────────────────────
 
 function startElapsedTimer() {
   state.elapsedTimer = window.setInterval(() => {
@@ -190,6 +162,19 @@ function startElapsedTimer() {
     renderSpeakerStats();
   }, 1000);
 }
+
+function clearTimers() {
+  if (state.elapsedTimer) {
+    clearInterval(state.elapsedTimer);
+    state.elapsedTimer = null;
+  }
+  if (state.activeSpeakerTimer) {
+    clearTimeout(state.activeSpeakerTimer);
+    state.activeSpeakerTimer = null;
+  }
+}
+
+// ─── 발화 처리 ────────────────────────────────────────────────────────────────
 
 function handleUtterance(utterance) {
   const speakerId = utterance.speaker_id;
@@ -252,14 +237,10 @@ function handleUtterance(utterance) {
   renderAll();
 }
 
+// ─── 패턴 감지 ────────────────────────────────────────────────────────────────
+
 function pushEvent(kind, message) {
-  const item = {
-    id: `${Date.now()}-${Math.random()}`,
-    kind,
-    message,
-    at: Date.now(),
-  };
-  state.events.unshift(item);
+  state.events.unshift({ id: `${Date.now()}-${Math.random()}`, kind, message, at: Date.now() });
   if (state.events.length > MAX_FEED_ITEMS) state.events.length = MAX_FEED_ITEMS;
 }
 
@@ -317,6 +298,66 @@ function detectInefficientPattern(lastUtterance) {
   }
 }
 
+// ─── 회의 종료 ────────────────────────────────────────────────────────────────
+
+function endMeeting() {
+  state.stream?.disconnect();
+  clearTimers();
+  state.activeSpeakerId = null;
+
+  const report = buildReport();
+  sessionStorage.setItem("meetingReport", JSON.stringify(report));
+  window.location.href = "/report.html";
+}
+
+function buildReport() {
+  const speakers = [...state.speakerStats.values()].sort((a, b) => b.talkRatio - a.talkRatio);
+  const dominantCount = state.warnings.filter((w) => w.type === "dominance").length;
+  const silenceCount = state.warnings.filter((w) => w.type === "silence").length;
+  const inefficientCount = state.events.filter((e) => e.kind === "warn").length;
+
+  let score = 100;
+  score -= dominantCount * 15;
+  score -= silenceCount * 10;
+  score -= Math.min(inefficientCount * 3, 20);
+  score = Math.max(score, 0);
+
+  let feedback = "발언 균형이 양호합니다.";
+  if (dominantCount > 0) feedback = "특정 인원의 발언 지분이 높아 균형 개선이 필요합니다.";
+  if (silenceCount > 1) feedback = "다수 침묵 참여자가 감지되어 참여 유도 질문을 권장합니다.";
+
+  return {
+    meetingId: state.meeting.id,
+    title: state.meeting.title,
+    generatedAt: Date.now(),
+    score,
+    balanceScore: getBalanceScore(),
+    feedback,
+    speakers: speakers.map((s) => ({
+      speakerId: s.speakerId,
+      name: s.name,
+      talkTimeSec: Number((s.talkTimeMs / 1000).toFixed(1)),
+      talkRatio: Math.round(s.talkRatio * 100),
+      turnCount: s.turnCount,
+      sentimentCounts: { ...s.sentimentCounts },
+      avgSentiment: s.turnCount ? Math.round((s.sentimentScoreSum / s.turnCount) * 100) / 100 : 0,
+    })),
+    warnings: state.warnings,
+    events: state.events,
+    topics: [...state.topicCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([topic, count]) => ({ topic, count })),
+  };
+}
+
+// ─── 렌더링 ───────────────────────────────────────────────────────────────────
+
+function setStatus(msg) {
+  const modeLabel = state.streamMode === "deepgram" ? "REALTIME" : "INIT";
+  el.status.textContent = `[${modeLabel}] ${msg} (${new Date().toLocaleTimeString("ko-KR")})`;
+}
+
 function renderAll() {
   renderElapsed();
   renderActiveSpeaker();
@@ -328,6 +369,79 @@ function renderAll() {
   renderTopicCloud();
   renderUtterances();
   renderEvents();
+}
+
+function renderElapsed() {
+  el.elapsed.textContent = formatElapsed(state.meetingElapsedSec);
+}
+
+function renderActiveSpeaker() {
+  if (!state.activeSpeakerId) {
+    el.activeSpeakerBadge.textContent = "활성 화자: 대기 중";
+    el.activeSpeakerBadge.classList.remove("is-active");
+    el.activeSpeakerBadge.style.borderColor = "";
+    return;
+  }
+
+  const stat = state.speakerStats.get(state.activeSpeakerId);
+  const color = getSpeakerColor(state.activeSpeakerId);
+  el.activeSpeakerBadge.textContent = `활성 화자: ${stat?.name ?? "알 수 없음"}`;
+  el.activeSpeakerBadge.classList.add("is-active");
+  el.activeSpeakerBadge.style.borderColor = color;
+}
+
+function renderLiveTranscript() {
+  el.liveTranscript.textContent = state.liveTranscript
+    ? `실시간 자막: ${state.liveTranscript}`
+    : "실시간 자막: 대기 중...";
+}
+
+function renderSpeakerStats() {
+  el.speakerStats.innerHTML = [...state.speakerStats.values()]
+    .sort((a, b) => b.talkRatio - a.talkRatio)
+    .map((s) => {
+      const color = getSpeakerColor(s.speakerId);
+      const hasWarning = state.warnings.some((w) => w.speakerId === s.speakerId);
+      const isActive = state.activeSpeakerId === s.speakerId;
+      const avgScore = s.turnCount ? s.sentimentScoreSum / s.turnCount : 0;
+      const sentimentEmoji = avgScore > 0.25 ? "😊" : avgScore < -0.25 ? "😠" : "😐";
+      const sentimentLabel = avgScore > 0.25 ? "긍정" : avgScore < -0.25 ? "부정" : "중립";
+
+      return `<article class="speaker-card ${hasWarning ? "is-warning" : ""} ${isActive ? "is-active" : ""}" style="border-color:${isActive ? color : ""}">
+        <p class="speaker-name"><span class="speaker-dot" style="background:${color}"></span>${escapeHtml(s.name)}</p>
+        <p class="speaker-meta">지분 ${Math.round(s.talkRatio * 100)}% · 턴 ${s.turnCount}회</p>
+        <p class="speaker-meta">총 발언 ${(s.talkTimeMs / 1000).toFixed(1)}초</p>
+        <p class="speaker-sentiment">${sentimentEmoji} ${sentimentLabel} (${avgScore >= 0 ? "+" : ""}${avgScore.toFixed(2)})</p>
+      </article>`;
+    })
+    .join("");
+}
+
+function renderRatioFeed() {
+  el.ratioFeed.innerHTML = [...state.speakerStats.values()]
+    .sort((a, b) => b.talkRatio - a.talkRatio)
+    .map((s) => {
+      const color = getSpeakerColor(s.speakerId);
+      const ratio = Math.round(s.talkRatio * 100);
+      return `<div class="ratio-item">
+        <div class="ratio-head">
+          <span class="ratio-label" style="color:${color}">${escapeHtml(s.name)}</span>
+          <span>${ratio}%</span>
+        </div>
+        <div class="ratio-track"><div class="ratio-fill" style="width:${ratio}%;background:${color}"></div></div>
+        <div class="ratio-meta">${s.turnCount}회 · ${(s.talkTimeMs / 1000).toFixed(1)}초</div>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderBalanceScore() {
+  const score = getBalanceScore();
+  el.balanceScore.textContent = String(score);
+  el.balanceScore.classList.remove("good", "mid", "low");
+  if (score >= 70) el.balanceScore.classList.add("good");
+  else if (score >= 40) el.balanceScore.classList.add("mid");
+  else el.balanceScore.classList.add("low");
 }
 
 function renderSentimentSummary() {
@@ -386,96 +500,13 @@ function renderTopicCloud() {
     .join("");
 }
 
-function renderElapsed() {
-  el.elapsed.textContent = formatElapsed(state.meetingElapsedSec);
-}
-
-function renderActiveSpeaker() {
-  if (!state.activeSpeakerId) {
-    el.activeSpeakerBadge.textContent = "활성 화자: 대기 중";
-    el.activeSpeakerBadge.classList.remove("is-active");
-    el.activeSpeakerBadge.style.borderColor = "";
-    return;
-  }
-
-  const stat = state.speakerStats.get(state.activeSpeakerId);
-  const color = getSpeakerColor(state.activeSpeakerId);
-  el.activeSpeakerBadge.textContent = `활성 화자: ${stat?.name ?? "알 수 없음"}`;
-  el.activeSpeakerBadge.classList.add("is-active");
-  el.activeSpeakerBadge.style.borderColor = color;
-}
-
-function renderLiveTranscript() {
-  el.liveTranscript.textContent = state.liveTranscript
-    ? `실시간 자막: ${state.liveTranscript}`
-    : "실시간 자막: 대기 중...";
-}
-
-function renderSpeakerStats() {
-  const rows = [...state.speakerStats.values()]
-    .sort((a, b) => b.talkRatio - a.talkRatio)
-    .map((s) => {
-      const color = getSpeakerColor(s.speakerId);
-      const hasWarning = state.warnings.some((w) => w.speakerId === s.speakerId);
-      const isActive = state.activeSpeakerId === s.speakerId;
-
-      const avgScore = s.turnCount ? (s.sentimentScoreSum / s.turnCount) : 0;
-      const sentimentEmoji = avgScore > 0.25 ? "😊" : avgScore < -0.25 ? "😠" : "😐";
-      const sentimentLabel = avgScore > 0.25 ? "긍정" : avgScore < -0.25 ? "부정" : "중립";
-
-      return `<article class="speaker-card ${hasWarning ? "is-warning" : ""} ${isActive ? "is-active" : ""}" style="border-color:${
-        isActive ? color : ""
-      }">
-        <p class="speaker-name"><span class="speaker-dot" style="background:${color}"></span>${escapeHtml(s.name)}</p>
-        <p class="speaker-meta">지분 ${Math.round(s.talkRatio * 100)}% · 턴 ${s.turnCount}회</p>
-        <p class="speaker-meta">총 발언 ${(s.talkTimeMs / 1000).toFixed(1)}초</p>
-        <p class="speaker-sentiment">${sentimentEmoji} ${sentimentLabel} (${avgScore >= 0 ? "+" : ""}${avgScore.toFixed(2)})</p>
-      </article>`;
-    })
-    .join("");
-
-  el.speakerStats.innerHTML = rows;
-}
-
-function renderRatioFeed() {
-  const rows = [...state.speakerStats.values()]
-    .sort((a, b) => b.talkRatio - a.talkRatio)
-    .map((s) => {
-      const color = getSpeakerColor(s.speakerId);
-      const ratio = Math.round(s.talkRatio * 100);
-      return `<div class="ratio-item">
-        <div class="ratio-head">
-          <span class="ratio-label" style="color:${color}">${escapeHtml(s.name)}</span>
-          <span>${ratio}%</span>
-        </div>
-        <div class="ratio-track"><div class="ratio-fill" style="width:${ratio}%;background:${color}"></div></div>
-        <div class="ratio-meta">${s.turnCount}회 · ${(s.talkTimeMs / 1000).toFixed(1)}초</div>
-      </div>`;
-    })
-    .join("");
-
-  el.ratioFeed.innerHTML = rows;
-}
-
-function renderBalanceScore() {
-  const score = getBalanceScore();
-  el.balanceScore.textContent = String(score);
-  el.balanceScore.classList.remove("good", "mid", "low");
-  if (score >= 70) el.balanceScore.classList.add("good");
-  else if (score >= 40) el.balanceScore.classList.add("mid");
-  else el.balanceScore.classList.add("low");
-}
-
 function renderUtterances() {
   el.utteranceFeed.innerHTML = state.utterances
     .map((u) => {
-      const speakerId = u.speaker_id;
-      const speakerName = state.speakerStats.get(speakerId)?.name ?? "미확정 화자";
-      const color = getSpeakerColor(speakerId);
+      const speakerName = state.speakerStats.get(u.speaker_id)?.name ?? "미확정 화자";
+      const color = getSpeakerColor(u.speaker_id);
       const sEmoji = u.sentiment === "positive" ? "😊" : u.sentiment === "negative" ? "😠" : "😐";
-      return `<li><strong style="color:${color}">${escapeHtml(speakerName)}</strong> · ${(u.duration / 1000).toFixed(
-        1
-      )}초 <span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span><br/>${escapeHtml(u.transcript)}</li>`;
+      return `<li><strong style="color:${color}">${escapeHtml(speakerName)}</strong> · ${(u.duration / 1000).toFixed(1)}초 <span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span><br/>${escapeHtml(u.transcript)}</li>`;
     })
     .join("");
 }
@@ -490,152 +521,7 @@ function renderEvents() {
     .join("");
 }
 
-function endMeeting() {
-  state.stream?.disconnect();
-  clearTimers();
-  state.activeSpeakerId = null;
-
-  const report = buildReport();
-  renderReport(report);
-  transitionView("report");
-}
-
-function buildReport() {
-  const speakers = [...state.speakerStats.values()].sort((a, b) => b.talkRatio - a.talkRatio);
-  const dominantCount = state.warnings.filter((w) => w.type === "dominance").length;
-  const silenceCount = state.warnings.filter((w) => w.type === "silence").length;
-  const inefficientCount = state.events.filter((e) => e.kind === "warn").length;
-
-  let score = 100;
-  score -= dominantCount * 15;
-  score -= silenceCount * 10;
-  score -= Math.min(inefficientCount * 3, 20);
-  score = Math.max(score, 0);
-
-  let feedback = "발언 균형이 양호합니다.";
-  if (dominantCount > 0) feedback = "특정 인원의 발언 지분이 높아 균형 개선이 필요합니다.";
-  if (silenceCount > 1) feedback = "다수 침묵 참여자가 감지되어 참여 유도 질문을 권장합니다.";
-
-  return {
-    meetingId: state.meeting.id,
-    title: state.meeting.title,
-    generatedAt: Date.now(),
-    score,
-    balanceScore: getBalanceScore(),
-    feedback,
-    speakers: speakers.map((s) => ({
-      speakerId: s.speakerId,
-      name: s.name,
-      talkTimeSec: Number((s.talkTimeMs / 1000).toFixed(1)),
-      talkRatio: Math.round(s.talkRatio * 100),
-      turnCount: s.turnCount,
-      sentimentCounts: { ...s.sentimentCounts },
-      avgSentiment: s.turnCount ? Math.round((s.sentimentScoreSum / s.turnCount) * 100) / 100 : 0,
-    })),
-    warnings: state.warnings,
-    events: state.events,
-    topics: [...state.topicCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([topic, count]) => ({ topic, count })),
-  };
-}
-
-function renderReport(report) {
-  state.latestReport = report;
-  el.reportGeneratedAt.textContent = `생성 시각: ${new Date(report.generatedAt).toLocaleString("ko-KR")}`;
-  el.reportScore.textContent = `${report.score} / 100`;
-  el.reportFeedback.textContent = `${report.feedback} (균형 지수: ${report.balanceScore})`;
-
-  el.reportSpeakers.innerHTML = report.speakers
-    .map((s) => {
-      const color = getSpeakerColor(s.speakerId);
-      const sEmoji = s.avgSentiment > 0.25 ? "😊" : s.avgSentiment < -0.25 ? "😠" : "😐";
-      const sLabel = s.avgSentiment > 0.25 ? "긍정" : s.avgSentiment < -0.25 ? "부정" : "중립";
-      return `<li>
-        <span class="report-speaker-name" style="color:${color}">${escapeHtml(s.name)}</span> · 지분 ${
-        s.talkRatio
-      }% · 발언 ${s.talkTimeSec}초 · ${s.turnCount}회
-        <span class="sentiment-tag sentiment-${s.avgSentiment > 0.25 ? "positive" : s.avgSentiment < -0.25 ? "negative" : "neutral"}">${sEmoji} ${sLabel}</span>
-      </li>`;
-    })
-    .join("");
-
-  if (report.topics?.length) {
-    const maxCount = report.topics[0]?.count ?? 1;
-    el.reportTopics.innerHTML = report.topics
-      .map((t) => {
-        const size = Math.max(12, Math.min(22, 12 + (t.count / maxCount) * 10));
-        return `<span class="topic-tag" style="font-size:${size}px">${escapeHtml(t.topic)} <sup>${t.count}</sup></span>`;
-      })
-      .join("");
-  } else {
-    el.reportTopics.innerHTML = `<p class="muted-copy">감지된 토픽이 없습니다.</p>`;
-  }
-
-  const silentNames = report.warnings
-    .filter((w) => w.type === "silence")
-    .map((w) => state.speakerStats.get(w.speakerId)?.name)
-    .filter(Boolean);
-
-  el.reportEvents.innerHTML = [
-    `<li>침묵 참여자: ${silentNames.length ? silentNames.map((n) => escapeHtml(n)).join(", ") : "없음"}</li>`,
-    ...report.events.slice(0, 10).map((e) => `<li>${escapeHtml(e.message)}</li>`),
-  ].join("");
-}
-
-function exportReport() {
-  if (!state.latestReport) return;
-
-  const blob = new Blob([JSON.stringify(state.latestReport, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${state.meeting.title.replace(/\s+/g, "_")}-report.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function transitionView(target) {
-  [el.lobby, el.dashboard, el.report].forEach((view) => {
-    view.classList.add("hidden");
-    view.classList.remove("active");
-  });
-
-  const current = target === "dashboard" ? el.dashboard : target === "report" ? el.report : el.lobby;
-  current.classList.remove("hidden");
-  current.classList.add("active");
-}
-
-function resetToLobby() {
-  state.stream?.disconnect();
-  clearTimers();
-
-  state.meeting = null;
-  state.speakerStats = new Map();
-  state.utterances = [];
-  state.events = [];
-  state.warnings = [];
-  state.latestReport = null;
-  state.activeSpeakerId = null;
-  state.liveTranscript = "";
-  state.meetingElapsedSec = 0;
-  state.streamMode = "none";
-  state.topicCounts = new Map();
-
-  transitionView("lobby");
-}
-
-function clearTimers() {
-  if (state.elapsedTimer) {
-    clearInterval(state.elapsedTimer);
-    state.elapsedTimer = null;
-  }
-  if (state.activeSpeakerTimer) {
-    clearTimeout(state.activeSpeakerTimer);
-    state.activeSpeakerTimer = null;
-  }
-}
+// ─── 유틸리티 ─────────────────────────────────────────────────────────────────
 
 function getBalanceScore() {
   const values = [...state.speakerStats.values()].map((s) => s.talkTimeMs);
@@ -645,7 +531,6 @@ function getBalanceScore() {
   const sorted = [...values].sort((a, b) => a - b);
   const n = sorted.length;
   let sumDiff = 0;
-
   for (let i = 0; i < n; i += 1) {
     for (let j = 0; j < n; j += 1) {
       sumDiff += Math.abs(sorted[i] - sorted[j]);

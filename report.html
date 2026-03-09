@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>회의 리포트 – MeetingReferee</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="view view-report active">
+        <div class="report-topbar">
+          <div>
+            <p class="hero-eyebrow">Meeting Report</p>
+            <h2>회의 종료 리포트</h2>
+            <p id="report-generated-at" class="muted-copy"></p>
+          </div>
+          <div class="actions">
+            <button id="restart" class="btn btn-primary">새 회의</button>
+            <button id="export-report" class="btn">리포트 내보내기</button>
+          </div>
+        </div>
+
+        <div class="report-grid">
+          <article class="panel-card report-score-card">
+            <h3>품질 점수</h3>
+            <p id="report-score" class="score">0 / 100</p>
+            <p id="report-feedback"></p>
+          </article>
+
+          <article class="panel-card">
+            <h3>화자별 지분</h3>
+            <ul id="report-speakers" class="report-list"></ul>
+          </article>
+
+          <article class="panel-card">
+            <h3>주요 토픽</h3>
+            <div id="report-topics" class="topic-cloud"></div>
+          </article>
+
+          <article class="panel-card">
+            <h3>침묵 참여자/비효율 이벤트</h3>
+            <ul id="report-events" class="report-list"></ul>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./report.js"></script>
+  </body>
+</html>
