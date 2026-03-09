@@ -74,11 +74,8 @@ document.getElementById("restart").addEventListener("click", resetToLobby);
 document.getElementById("export-report").addEventListener("click", exportReport);
 
 function parseParticipants(raw) {
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 10);
+  const count = Math.min(Math.max(parseInt(raw, 10) || 2, 2), 20);
+  return Array.from({ length: count }, (_, i) => `참여자 ${i + 1}`);
 }
 
 function createSpeakerStats(participants) {
@@ -104,7 +101,7 @@ async function startMeeting() {
   const title = el.titleInput.value.trim() || "이름 없는 회의";
   const participants = parseParticipants(el.participantInput.value);
   if (participants.length < 2) {
-    alert("참여자를 최소 2명 입력해 주세요.");
+    alert("참여자 수는 최소 2명이어야 합니다.");
     return;
   }
 
