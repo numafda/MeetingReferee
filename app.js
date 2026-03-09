@@ -35,6 +35,7 @@ const state = {
   activeSpeakerTimer: null,
   liveTranscript: "",
   streamMode: "none",
+  topicCounts: new Map(),
 };
 
 const el = {
@@ -50,6 +51,8 @@ const el = {
   eventFeed: document.getElementById("event-feed"),
   ratioFeed: document.getElementById("ratio-feed"),
   balanceScore: document.getElementById("balance-score"),
+  sentimentSummary: document.getElementById("sentiment-summary"),
+  topicCloud: document.getElementById("topic-cloud"),
   activeSpeakerBadge: document.getElementById("active-speaker-badge"),
   liveTranscript: document.getElementById("live-transcript"),
   elapsed: document.getElementById("meeting-elapsed"),
@@ -57,6 +60,7 @@ const el = {
   reportScore: document.getElementById("report-score"),
   reportFeedback: document.getElementById("report-feedback"),
   reportSpeakers: document.getElementById("report-speakers"),
+  reportTopics: document.getElementById("report-topics"),
   reportEvents: document.getElementById("report-events"),
 };
 
@@ -89,6 +93,8 @@ function createSpeakerStats(participants) {
         turnCount: 0,
         lastSpokeAt: null,
         dominanceSince: null,
+        sentimentCounts: { positive: 0, neutral: 0, negative: 0 },
+        sentimentScoreSum: 0,
       },
     ])
   );
@@ -120,6 +126,7 @@ async function startMeeting() {
   state.liveTranscript = "";
   state.meetingElapsedSec = 0;
   state.streamMode = "none";
+  state.topicCounts = new Map();
 
   el.dashboardTitle.textContent = `${title} - 실시간 모니터링`;
   transitionView("dashboard");
@@ -217,6 +224,15 @@ function handleUtterance(utterance) {
   stat.turnCount += 1;
   stat.lastSpokeAt = utterance.created_at;
 
+  if (utterance.sentiment) {
+    stat.sentimentCounts[utterance.sentiment] = (stat.sentimentCounts[utterance.sentiment] ?? 0) + 1;
+    stat.sentimentScoreSum += utterance.sentimentScore ?? 0;
+  }
+
+  for (const t of utterance.topics ?? []) {
+    state.topicCounts.set(t.topic, (state.topicCounts.get(t.topic) ?? 0) + 1);
+  }
+
   const allTalkTime = [...state.speakerStats.values()].reduce((sum, s) => sum + s.talkTimeMs, 0);
   state.speakerStats.forEach((s) => {
     s.talkRatio = allTalkTime ? s.talkTimeMs / allTalkTime : 0;
@@ -311,8 +327,66 @@ function renderAll() {
   renderSpeakerStats();
   renderRatioFeed();
   renderBalanceScore();
+  renderSentimentSummary();
+  renderTopicCloud();
   renderUtterances();
   renderEvents();
+}
+
+function renderSentimentSummary() {
+  const speakers = [...state.speakerStats.values()].filter((s) => s.turnCount > 0);
+  if (!speakers.length) {
+    el.sentimentSummary.innerHTML = `<p class="muted-copy">발화 데이터 수집 중...</p>`;
+    return;
+  }
+
+  el.sentimentSummary.innerHTML = speakers
+    .map((s) => {
+      const color = getSpeakerColor(s.speakerId);
+      const avg = s.sentimentScoreSum / s.turnCount;
+      const emoji = avg > 0.25 ? "😊" : avg < -0.25 ? "😠" : "😐";
+      const { positive, neutral, negative } = s.sentimentCounts;
+      const total = positive + neutral + negative || 1;
+      const pPct = Math.round((positive / total) * 100);
+      const neuPct = Math.round((neutral / total) * 100);
+      const nPct = Math.round((negative / total) * 100);
+
+      return `<div class="sentiment-item">
+        <div class="sentiment-head">
+          <span style="color:${color};font-weight:700">${escapeHtml(s.name)}</span>
+          <span>${emoji} ${avg.toFixed(2)}</span>
+        </div>
+        <div class="sentiment-bar">
+          <div class="sentiment-fill positive" style="width:${pPct}%"></div>
+          <div class="sentiment-fill neutral" style="width:${neuPct}%"></div>
+          <div class="sentiment-fill negative" style="width:${nPct}%"></div>
+        </div>
+        <div class="sentiment-labels">
+          <span class="s-positive">긍정 ${pPct}%</span>
+          <span class="s-neutral">중립 ${neuPct}%</span>
+          <span class="s-negative">부정 ${nPct}%</span>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderTopicCloud() {
+  if (!state.topicCounts.size) {
+    el.topicCloud.innerHTML = `<p class="muted-copy">토픽 수집 중...</p>`;
+    return;
+  }
+
+  const sorted = [...state.topicCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const maxCount = sorted[0]?.[1] ?? 1;
+
+  el.topicCloud.innerHTML = sorted
+    .map(([topic, count]) => {
+      const size = Math.max(12, Math.min(22, 12 + (count / maxCount) * 10));
+      const opacity = Math.max(0.5, count / maxCount);
+      return `<span class="topic-tag" style="font-size:${size}px;opacity:${opacity}">${escapeHtml(topic)} <sup>${count}</sup></span>`;
+    })
+    .join("");
 }
 
 function renderElapsed() {
@@ -348,12 +422,17 @@ function renderSpeakerStats() {
       const hasWarning = state.warnings.some((w) => w.speakerId === s.speakerId);
       const isActive = state.activeSpeakerId === s.speakerId;
 
+      const avgScore = s.turnCount ? (s.sentimentScoreSum / s.turnCount) : 0;
+      const sentimentEmoji = avgScore > 0.25 ? "😊" : avgScore < -0.25 ? "😠" : "😐";
+      const sentimentLabel = avgScore > 0.25 ? "긍정" : avgScore < -0.25 ? "부정" : "중립";
+
       return `<article class="speaker-card ${hasWarning ? "is-warning" : ""} ${isActive ? "is-active" : ""}" style="border-color:${
         isActive ? color : ""
       }">
         <p class="speaker-name"><span class="speaker-dot" style="background:${color}"></span>${escapeHtml(s.name)}</p>
         <p class="speaker-meta">지분 ${Math.round(s.talkRatio * 100)}% · 턴 ${s.turnCount}회</p>
         <p class="speaker-meta">총 발언 ${(s.talkTimeMs / 1000).toFixed(1)}초</p>
+        <p class="speaker-sentiment">${sentimentEmoji} ${sentimentLabel} (${avgScore >= 0 ? "+" : ""}${avgScore.toFixed(2)})</p>
       </article>`;
     })
     .join("");
@@ -396,9 +475,10 @@ function renderUtterances() {
       const speakerId = u.speaker_id;
       const speakerName = state.speakerStats.get(speakerId)?.name ?? "미확정 화자";
       const color = getSpeakerColor(speakerId);
+      const sEmoji = u.sentiment === "positive" ? "😊" : u.sentiment === "negative" ? "😠" : "😐";
       return `<li><strong style="color:${color}">${escapeHtml(speakerName)}</strong> · ${(u.duration / 1000).toFixed(
         1
-      )}초<br/>${escapeHtml(u.transcript)}</li>`;
+      )}초 <span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span><br/>${escapeHtml(u.transcript)}</li>`;
     })
     .join("");
 }
@@ -452,9 +532,15 @@ function buildReport() {
       talkTimeSec: Number((s.talkTimeMs / 1000).toFixed(1)),
       talkRatio: Math.round(s.talkRatio * 100),
       turnCount: s.turnCount,
+      sentimentCounts: { ...s.sentimentCounts },
+      avgSentiment: s.turnCount ? Math.round((s.sentimentScoreSum / s.turnCount) * 100) / 100 : 0,
     })),
     warnings: state.warnings,
     events: state.events,
+    topics: [...state.topicCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([topic, count]) => ({ topic, count })),
   };
 }
 
@@ -467,13 +553,28 @@ function renderReport(report) {
   el.reportSpeakers.innerHTML = report.speakers
     .map((s) => {
       const color = getSpeakerColor(s.speakerId);
+      const sEmoji = s.avgSentiment > 0.25 ? "😊" : s.avgSentiment < -0.25 ? "😠" : "😐";
+      const sLabel = s.avgSentiment > 0.25 ? "긍정" : s.avgSentiment < -0.25 ? "부정" : "중립";
       return `<li>
         <span class="report-speaker-name" style="color:${color}">${escapeHtml(s.name)}</span> · 지분 ${
         s.talkRatio
       }% · 발언 ${s.talkTimeSec}초 · ${s.turnCount}회
+        <span class="sentiment-tag sentiment-${s.avgSentiment > 0.25 ? "positive" : s.avgSentiment < -0.25 ? "negative" : "neutral"}">${sEmoji} ${sLabel}</span>
       </li>`;
     })
     .join("");
+
+  if (report.topics?.length) {
+    const maxCount = report.topics[0]?.count ?? 1;
+    el.reportTopics.innerHTML = report.topics
+      .map((t) => {
+        const size = Math.max(12, Math.min(22, 12 + (t.count / maxCount) * 10));
+        return `<span class="topic-tag" style="font-size:${size}px">${escapeHtml(t.topic)} <sup>${t.count}</sup></span>`;
+      })
+      .join("");
+  } else {
+    el.reportTopics.innerHTML = `<p class="muted-copy">감지된 토픽이 없습니다.</p>`;
+  }
 
   const silentNames = report.warnings
     .filter((w) => w.type === "silence")
@@ -523,6 +624,7 @@ function resetToLobby() {
   state.liveTranscript = "";
   state.meetingElapsedSec = 0;
   state.streamMode = "none";
+  state.topicCounts = new Map();
 
   transitionView("lobby");
 }

@@ -56,6 +56,35 @@ function extractSpeakerId(alt) {
   return dominant === undefined ? null : `speaker_${dominant + 1}`;
 }
 
+function extractSentiment(alt) {
+  const sentiments = (alt?.words ?? [])
+    .map((w) => w?.sentiment_score)
+    .filter((s) => typeof s === "number" && Number.isFinite(s));
+
+  if (!sentiments.length) return { sentiment: "neutral", score: 0 };
+
+  const avg = sentiments.reduce((sum, s) => sum + s, 0) / sentiments.length;
+
+  let label = "neutral";
+  if (avg > 0.25) label = "positive";
+  else if (avg < -0.25) label = "negative";
+
+  return { sentiment: label, score: Math.round(avg * 100) / 100 };
+}
+
+function extractTopics(payload) {
+  const segments = payload?.topics?.segments ?? [];
+  const topics = [];
+  for (const seg of segments) {
+    for (const t of seg.topics ?? []) {
+      if (t.topic && t.confidence_score > 0.5) {
+        topics.push({ topic: t.topic, confidence: Math.round(t.confidence_score * 100) / 100 });
+      }
+    }
+  }
+  return topics;
+}
+
 function parseDeepgramResult(payload) {
   if (payload?.type !== "Results") return null;
 
@@ -71,6 +100,8 @@ function parseDeepgramResult(payload) {
   const endSec = lastWord?.end ?? payload.duration ?? startSec;
 
   const isFinal = Boolean(payload.is_final);
+  const { sentiment, score: sentimentScore } = isFinal ? extractSentiment(alt) : { sentiment: null, score: 0 };
+  const topics = isFinal ? extractTopics(payload) : [];
 
   return {
     id: uuid(),
@@ -81,6 +112,9 @@ function parseDeepgramResult(payload) {
     duration: Math.max(100, Math.round((endSec - startSec) * 1000)),
     created_at: Date.now(),
     is_final: isFinal,
+    sentiment,
+    sentimentScore,
+    topics,
   };
 }
 
@@ -122,6 +156,8 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
       endpointing: "800",
       utterance_end_ms: "2000",
       vad_events: "true",
+      sentiment: "true",
+      topics: "true",
       encoding: "linear16",
       sample_rate: String(TARGET_SAMPLE_RATE),
       channels: "1",
