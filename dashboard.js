@@ -34,7 +34,7 @@ const state = {
   activeSpeakerTimer: null,
   liveTranscript: "",
   streamMode: "none",
-  topicCounts: new Map(),
+
 };
 
 const el = {
@@ -46,7 +46,7 @@ const el = {
   ratioFeed: document.getElementById("ratio-feed"),
   balanceScore: document.getElementById("balance-score"),
   sentimentSummary: document.getElementById("sentiment-summary"),
-  topicCloud: document.getElementById("topic-cloud"),
+
   activeSpeakerBadge: document.getElementById("active-speaker-badge"),
   liveTranscript: document.getElementById("live-transcript"),
   elapsed: document.getElementById("meeting-elapsed"),
@@ -211,10 +211,6 @@ function handleUtterance(utterance) {
     stat.sentimentScoreSum += utterance.sentimentScore ?? 0;
   }
 
-  for (const t of utterance.topics ?? []) {
-    state.topicCounts.set(t.topic, (state.topicCounts.get(t.topic) ?? 0) + 1);
-  }
-
   const allTalkTime = [...state.speakerStats.values()].reduce((sum, s) => sum + s.talkTimeMs, 0);
   state.speakerStats.forEach((s) => {
     s.talkRatio = allTalkTime ? s.talkTimeMs / allTalkTime : 0;
@@ -344,10 +340,6 @@ function buildReport() {
     })),
     warnings: state.warnings,
     events: state.events,
-    topics: [...state.topicCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([topic, count]) => ({ topic, count })),
   };
 }
 
@@ -366,7 +358,6 @@ function renderAll() {
   renderRatioFeed();
   renderBalanceScore();
   renderSentimentSummary();
-  renderTopicCloud();
   renderUtterances();
   renderEvents();
 }
@@ -478,24 +469,6 @@ function renderSentimentSummary() {
           <span class="s-negative">부정 ${nPct}%</span>
         </div>
       </div>`;
-    })
-    .join("");
-}
-
-function renderTopicCloud() {
-  if (!state.topicCounts.size) {
-    el.topicCloud.innerHTML = `<p class="muted-copy">토픽 수집 중...</p>`;
-    return;
-  }
-
-  const sorted = [...state.topicCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
-  const maxCount = sorted[0]?.[1] ?? 1;
-
-  el.topicCloud.innerHTML = sorted
-    .map(([topic, count]) => {
-      const size = Math.max(12, Math.min(22, 12 + (count / maxCount) * 10));
-      const opacity = Math.max(0.5, count / maxCount);
-      return `<span class="topic-tag" style="font-size:${size}px;opacity:${opacity}">${escapeHtml(topic)} <sup>${count}</sup></span>`;
     })
     .join("");
 }

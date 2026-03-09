@@ -524,36 +524,6 @@ input {
   color: #fca5a5;
 }
 
-.topic-cloud {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.topic-tag {
-  display: inline-block;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(69, 129, 255, 0.1);
-  color: #93b4ff;
-  white-space: nowrap;
-  transition: transform 0.2s ease;
-}
-
-.topic-tag:hover {
-  transform: scale(1.05);
-  background: rgba(69, 129, 255, 0.2);
-}
-
-.topic-tag sup {
-  font-size: 0.7em;
-  color: var(--muted);
-  margin-left: 2px;
-}
-
 @media (max-width: 1000px) {
   .meeting-layout {
     grid-template-columns: 1fr;
