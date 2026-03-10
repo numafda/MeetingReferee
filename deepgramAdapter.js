@@ -72,19 +72,6 @@ function extractSentiment(alt) {
   return { sentiment: label, score: Math.round(avg * 100) / 100 };
 }
 
-function extractTopics(payload) {
-  const segments = payload?.topics?.segments ?? [];
-  const topics = [];
-  for (const seg of segments) {
-    for (const t of seg.topics ?? []) {
-      if (t.topic && t.confidence_score > 0.5) {
-        topics.push({ topic: t.topic, confidence: Math.round(t.confidence_score * 100) / 100 });
-      }
-    }
-  }
-  return topics;
-}
-
 function parseDeepgramResult(payload) {
   if (payload?.type !== "Results") return null;
 
@@ -101,8 +88,6 @@ function parseDeepgramResult(payload) {
 
   const isFinal = Boolean(payload.is_final);
   const { sentiment, score: sentimentScore } = isFinal ? extractSentiment(alt) : { sentiment: null, score: 0 };
-  const topics = isFinal ? extractTopics(payload) : [];
-
   return {
     id: uuid(),
     speaker_id: isFinal ? extractSpeakerId(alt) : null,
@@ -114,7 +99,6 @@ function parseDeepgramResult(payload) {
     is_final: isFinal,
     sentiment,
     sentimentScore,
-    topics,
   };
 }
 

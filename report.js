@@ -54,19 +54,6 @@ function renderReport(report) {
     })
     .join("");
 
-  const topicsEl = document.getElementById("report-topics");
-  if (report.topics?.length) {
-    const maxCount = report.topics[0]?.count ?? 1;
-    topicsEl.innerHTML = report.topics
-      .map((t) => {
-        const size = Math.max(12, Math.min(22, 12 + (t.count / maxCount) * 10));
-        return `<span class="topic-tag" style="font-size:${size}px">${escapeHtml(t.topic)} <sup>${t.count}</sup></span>`;
-      })
-      .join("");
-  } else {
-    topicsEl.innerHTML = `<p class="muted-copy">감지된 토픽이 없습니다.</p>`;
-  }
-
   const silentNames = report.warnings
     .filter((w) => w.type === "silence")
     .map((w) => report.speakers.find((s) => s.speakerId === w.speakerId)?.name)
