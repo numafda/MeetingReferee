@@ -1,3 +1,7 @@
+<div align=center>
+    <img src='docs/images/title_img.png' width=400>
+</div>
+
 # MeetingReferee Prototype
 
 요구명세서(v1.0) 기반 프로토타입입니다. 현재는 **Deepgram 실시간 연동 전용**으로 동작합니다.
