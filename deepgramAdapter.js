@@ -110,6 +110,7 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
   let source = null;
   let sink = null;
   let keepAliveTimer = null;
+  let isPaused = false;
 
   async function connect() {
     if (!window.isSecureContext) {
@@ -141,7 +142,6 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
       utterance_end_ms: "2000",
       vad_events: "true",
       sentiment: "true",
-
       encoding: "linear16",
       sample_rate: String(TARGET_SAMPLE_RATE),
       channels: "1",
@@ -205,6 +205,7 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
 
     processor.onaudioprocess = (event) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (isPaused) return;
 
       const float32 = event.inputBuffer.getChannelData(0);
       const downsampled = downsampleBuffer(float32, audioContext.sampleRate, TARGET_SAMPLE_RATE);
@@ -258,5 +259,13 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
     onStatus("스트림 연결 종료");
   }
 
-  return { connect, disconnect };
+  function pause() {
+    isPaused = true;
+  }
+
+  function resume() {
+    isPaused = false;
+  }
+
+  return { connect, disconnect, pause, resume };
 }
