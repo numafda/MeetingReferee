@@ -43,7 +43,7 @@ function buildMarkdown(report) {
   const sentimentLabel = (avg) => avg > 0.25 ? "긍정 😊" : avg < -0.25 ? "부정 😠" : "중립 😐";
 
   const speakerRows = report.speakers
-    .map((s) => `| ${s.name} | ${s.talkTimeSec}초 | ${s.talkRatio}% | ${s.turnCount}회 | ${sentimentLabel(s.avgSentiment)} (${s.avgSentiment >= 0 ? "+" : ""}${s.avgSentiment}) |`)
+    .map((s) => `| ${s.name} | ${s.talkTimeSec}초 | ${s.talkRatio}% | ${s.turnCount}회 | ${s.interruptionCount ?? 0}회 | ${sentimentLabel(s.avgSentiment)} (${s.avgSentiment >= 0 ? "+" : ""}${s.avgSentiment}) |`)
     .join("\n");
 
   const silentNames = report.warnings
@@ -64,8 +64,8 @@ function buildMarkdown(report) {
 
 ## 화자별 발언 현황
 
-| 참여자 | 발언 시간 | 지분 | 턴 수 | 감정 |
-|--------|---------|------|-------|------|
+| 참여자 | 발언 시간 | 지분 | 턴 수 | 끼어들기 | 감정 |
+|--------|---------|------|-------|---------|------|
 ${speakerRows}
 
 ---
@@ -99,8 +99,9 @@ function renderReport(report) {
       const sEmoji = s.avgSentiment > 0.25 ? "😊" : s.avgSentiment < -0.25 ? "😠" : "😐";
       const sLabel = s.avgSentiment > 0.25 ? "긍정" : s.avgSentiment < -0.25 ? "부정" : "중립";
       const sentimentClass = s.avgSentiment > 0.25 ? "positive" : s.avgSentiment < -0.25 ? "negative" : "neutral";
+      const interruptTag = s.interruptionCount ? ` · 끼어들기 ${s.interruptionCount}회` : "";
       return `<li>
-        <span class="report-speaker-name" style="color:${color}">${escapeHtml(s.name)}</span> · 지분 ${s.talkRatio}% · 발언 ${s.talkTimeSec}초 · ${s.turnCount}회
+        <span class="report-speaker-name" style="color:${color}">${escapeHtml(s.name)}</span> · 지분 ${s.talkRatio}% · 발언 ${s.talkTimeSec}초 · ${s.turnCount}회${interruptTag}
         <span class="sentiment-tag sentiment-${sentimentClass}">${sEmoji} ${sLabel}</span>
       </li>`;
     })

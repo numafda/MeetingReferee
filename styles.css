@@ -370,6 +370,11 @@ input {
   color: #ffafaf;
 }
 
+.tag.interrupt {
+  background: rgba(168, 85, 247, 0.18);
+  color: #d8b4fe;
+}
+
 .ratio-feed {
   margin-top: 10px;
   display: grid;

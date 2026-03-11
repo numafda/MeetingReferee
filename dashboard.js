@@ -21,6 +21,8 @@ const SPEAKER_COLORS = [
   "#818cf8",
 ];
 
+const INTERRUPTION_OVERLAP_MS = 200;
+
 const state = {
   meeting: null,
   speakerStats: new Map(),
@@ -36,6 +38,7 @@ const state = {
   streamMode: "none",
   topicCounts: new Map(),
   isPaused: false,
+  lastFinalUtterance: null,
 };
 
 const el = {
@@ -89,6 +92,7 @@ function createSpeakerStats(participants) {
         dominanceSince: null,
         sentimentCounts: { positive: 0, neutral: 0, negative: 0 },
         sentimentScoreSum: 0,
+        interruptionCount: 0,
       },
     ])
   );
@@ -231,6 +235,9 @@ function handleUtterance(utterance) {
     renderLiveTranscript();
   }, ACTIVE_SPEAKER_HOLD_MS);
 
+  detectInterruption(utterance);
+  state.lastFinalUtterance = utterance;
+
   detectDominance();
   detectSilence();
   detectInefficientPattern(utterance);
@@ -298,6 +305,26 @@ function detectInefficientPattern(lastUtterance) {
   }
 }
 
+function detectInterruption(utterance) {
+  const prev = state.lastFinalUtterance;
+  if (!prev) return;
+  if (prev.speaker_id === utterance.speaker_id) return;
+  if (prev.speaker_id === "unknown" || utterance.speaker_id === "unknown") return;
+
+  const overlap = prev.end_time - utterance.start_time;
+  if (overlap < INTERRUPTION_OVERLAP_MS) return;
+
+  const interrupter = state.speakerStats.get(utterance.speaker_id);
+  const interrupted = state.speakerStats.get(prev.speaker_id);
+  if (!interrupter || !interrupted) return;
+
+  interrupter.interruptionCount += 1;
+  pushEvent(
+    "interrupt",
+    `끼어들기 감지: ${interrupter.name}이(가) ${interrupted.name}의 발언 중 끼어듦 (겹침 ${(overlap / 1000).toFixed(1)}초)`,
+  );
+}
+
 // ─── 일시정지 / 재개 ──────────────────────────────────────────────────────────
 
 function togglePause() {
@@ -342,14 +369,17 @@ function buildReport() {
   const dominantCount = state.warnings.filter((w) => w.type === "dominance").length;
   const silenceCount = state.warnings.filter((w) => w.type === "silence").length;
   const inefficientCount = state.events.filter((e) => e.kind === "warn").length;
+  const interruptionCount = state.events.filter((e) => e.kind === "interrupt").length;
 
   let score = 100;
   score -= dominantCount * 15;
   score -= silenceCount * 10;
   score -= Math.min(inefficientCount * 3, 20);
+  score -= Math.min(interruptionCount * 2, 15);
   score = Math.max(score, 0);
 
   let feedback = "발언 균형이 양호합니다.";
+  if (interruptionCount >= 5) feedback = "끼어들기가 빈번하여 발언 규칙 합의를 권장합니다.";
   if (dominantCount > 0) feedback = "특정 인원의 발언 지분이 높아 균형 개선이 필요합니다.";
   if (silenceCount > 1) feedback = "다수 침묵 참여자가 감지되어 참여 유도 질문을 권장합니다.";
 
@@ -366,6 +396,7 @@ function buildReport() {
       talkTimeSec: Number((s.talkTimeMs / 1000).toFixed(1)),
       talkRatio: Math.round(s.talkRatio * 100),
       turnCount: s.turnCount,
+      interruptionCount: s.interruptionCount,
       sentimentCounts: { ...s.sentimentCounts },
       avgSentiment: s.turnCount ? Math.round((s.sentimentScoreSum / s.turnCount) * 100) / 100 : 0,
     })),
@@ -432,7 +463,7 @@ function renderSpeakerStats() {
       return `<article class="speaker-card ${hasWarning ? "is-warning" : ""} ${isActive ? "is-active" : ""}" style="border-color:${isActive ? color : ""}">
         <p class="speaker-name"><span class="speaker-dot" style="background:${color}"></span>${escapeHtml(s.name)}</p>
         <p class="speaker-meta">지분 ${Math.round(s.talkRatio * 100)}% · 턴 ${s.turnCount}회</p>
-        <p class="speaker-meta">총 발언 ${(s.talkTimeMs / 1000).toFixed(1)}초</p>
+        <p class="speaker-meta">총 발언 ${(s.talkTimeMs / 1000).toFixed(1)}초${s.interruptionCount ? ` · 끼어들기 ${s.interruptionCount}회` : ""}</p>
         <p class="speaker-sentiment">${sentimentEmoji} ${sentimentLabel} (${avgScore >= 0 ? "+" : ""}${avgScore.toFixed(2)})</p>
       </article>`;
     })
@@ -518,8 +549,8 @@ function renderUtterances() {
 function renderEvents() {
   el.eventFeed.innerHTML = state.events
     .map((e) => {
-      const cls = e.kind === "alert" ? "alert" : "warn";
-      const label = e.kind === "alert" ? "독점" : "주의";
+      const cls = e.kind === "alert" ? "alert" : e.kind === "interrupt" ? "interrupt" : "warn";
+      const label = e.kind === "alert" ? "독점" : e.kind === "interrupt" ? "끼어들기" : "주의";
       return `<li><span class="tag ${cls}">${label}</span>${escapeHtml(e.message)}</li>`;
     })
     .join("");
