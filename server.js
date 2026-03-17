@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const HOST = process.env.HOST || "0.0.0.0";
+const HOST = process.env.HOST || "::";
 const PORT = Number(process.env.PORT || 8080);
 const ROOT = process.cwd();
 
@@ -58,6 +58,25 @@ function readBody(req) {
   });
 }
 
+function readRawBody(req, maxBytes = 50 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error("Request body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
 async function handleTokenGrant(req, res) {
   const apiKey = process.env.DEEPGRAM_API_KEY;
   const allowBrowserKeyFallback = String(process.env.ALLOW_BROWSER_API_KEY_FALLBACK || "").toLowerCase() === "true";
@@ -92,12 +111,17 @@ async function handleTokenGrant(req, res) {
     }
 
     if (!dgRes.ok) {
-      const isPermissionDenied = payload?.err_code === "FORBIDDEN";
-      if (isPermissionDenied && allowBrowserKeyFallback) {
+      const errCode = String(payload?.err_code || "");
+      const errMsg = String(payload?.err_msg || "");
+      const canFallback =
+        errCode === "FORBIDDEN" || (errCode === "BAD_REQUEST" && /invalid credentials/i.test(errMsg));
+
+      if (canFallback && allowBrowserKeyFallback) {
         sendJson(res, 200, {
           auth_type: "api_key",
           access_token: apiKey,
-          warning: "token grant 권한 부족으로 브라우저 API key 인증으로 대체됨",
+          warning: "token grant 실패로 브라우저 API key 인증으로 대체됨",
+          grant_error: payload,
         });
         return;
       }
@@ -106,8 +130,8 @@ async function handleTokenGrant(req, res) {
         error: "deepgram_grant_failed",
         detail: payload,
         hint:
-          isPermissionDenied && !allowBrowserKeyFallback
-            ? "키 권한이 부족합니다. 관리자 권한 키를 쓰거나 ALLOW_BROWSER_API_KEY_FALLBACK=true 설정 후 재시도하세요."
+          canFallback && !allowBrowserKeyFallback
+            ? "token grant가 실패했습니다. 테스트라면 ALLOW_BROWSER_API_KEY_FALLBACK=true 설정 후 재시도하세요."
             : undefined,
       });
       return;
@@ -122,6 +146,75 @@ async function handleTokenGrant(req, res) {
     sendJson(res, 500, {
       error: "token_grant_internal_error",
       message: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
+async function handlePrerecordedTranscription(req, res) {
+  const apiKey = process.env.DEEPGRAM_API_KEY;
+  if (!apiKey) {
+    sendJson(res, 500, {
+      error: "DEEPGRAM_API_KEY is not configured",
+      message: "환경변수 DEEPGRAM_API_KEY를 설정해 주세요.",
+    });
+    return;
+  }
+
+  try {
+    const audioBuffer = await readRawBody(req);
+    if (!audioBuffer.length) {
+      sendJson(res, 400, { error: "empty_audio_body", message: "업로드된 오디오 데이터가 비어 있습니다." });
+      return;
+    }
+
+    const contentType = req.headers["content-type"] || "application/octet-stream";
+    const params = new URLSearchParams({
+      model: "nova-3",
+      language: "ko",
+      diarize: "true",
+      utterances: "true",
+      punctuate: "true",
+      smart_format: "true",
+      sentiment: "true",
+      detect_language: "false",
+    });
+
+    const dgRes = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${apiKey}`,
+        "Content-Type": String(contentType),
+      },
+      body: audioBuffer,
+    });
+
+    const text = await dgRes.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { raw: text };
+    }
+
+    if (!dgRes.ok) {
+      sendJson(res, dgRes.status, {
+        error: "deepgram_prerecorded_failed",
+        detail: payload,
+      });
+      return;
+    }
+
+    sendJson(res, 200, payload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown";
+    if (message === "Request body too large") {
+      sendJson(res, 413, { error: "request_too_large", message: "오디오 파일이 너무 큽니다." });
+      return;
+    }
+
+    sendJson(res, 500, {
+      error: "prerecorded_internal_error",
+      message,
     });
   }
 }
@@ -177,6 +270,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/api/deepgram/prerecorded") {
+    await handlePrerecordedTranscription(req, res);
+    return;
+  }
+
   if (req.method === "GET" || req.method === "HEAD") {
     serveStatic(req, res);
     return;
@@ -186,7 +284,7 @@ const server = http.createServer(async (req, res) => {
   res.end("Method Not Allowed");
 });
 
-server.listen(PORT, HOST, () => {
+server.listen({ port: PORT, host: HOST, ipv6Only: false }, () => {
   console.log(`MeetingReferee server running: http://${HOST}:${PORT}`);
   console.log("Deepgram token endpoint: POST /api/deepgram/token");
 });

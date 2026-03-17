@@ -39,6 +39,21 @@
               </div>
               <p id="active-speaker-badge" class="active-speaker-badge">활성 화자: 대기 중</p>
             </article>
+            <article id="test-source-panel" class="panel-card test-source-panel hidden">
+              <h3>테스트 소스 (음성 파일)</h3>
+              <p id="test-audio-meta" class="muted-copy">업로드된 테스트 음성 파일 정보 로딩 중...</p>
+              <audio id="test-audio-player" class="test-audio-player" controls preload="auto"></audio>
+            </article>
+            <article id="diagnostic-panel" class="panel-card diagnostic-panel hidden">
+              <h3>입력 진단</h3>
+              <p id="diag-input-mode" class="muted-copy">입력 모드: -</p>
+              <p id="diag-audio-level" class="muted-copy">오디오 레벨(RMS): -</p>
+              <p id="diag-audio-flow" class="muted-copy">오디오 전송 청크: -</p>
+              <p id="diag-deepgram-flow" class="muted-copy">Deepgram 메시지: -</p>
+              <p class="muted-copy">
+                재생 중 RMS가 계속 0.000에 가까우면 업로드 파일 오디오 입력이 전달되지 않는 상태입니다.
+              </p>
+            </article>
 
             <div id="speaker-stats" class="speaker-grid"></div>
 

@@ -112,7 +112,15 @@ function parseDeepgramResult(payload) {
   };
 }
 
-export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, onStatus, onError }) {
+export function createDeepgramRealtimeClient({
+  inputMode = "microphone",
+  audioElement = null,
+  getAuthCredential,
+  onUtterance,
+  onStatus,
+  onError,
+  onDiagnostics,
+}) {
   let ws = null;
   let mediaStream = null;
   let audioContext = null;
@@ -120,22 +128,19 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
   let source = null;
   let sink = null;
   let keepAliveTimer = null;
+  let diagnosticsTimer = null;
   let isPaused = false;
+  let audioChunkCount = 0;
+  let deepgramMessageCount = 0;
+  let lastRms = 0;
+  let lastDeepgramMessageAt = null;
 
   async function connect() {
     if (!window.isSecureContext) {
-      throw new Error("마이크 접근을 위해 localhost 또는 HTTPS 환경이 필요합니다.");
+      throw new Error("오디오 접근을 위해 localhost 또는 HTTPS 환경이 필요합니다.");
     }
 
-    onStatus("마이크 권한 요청 중...");
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    mediaStream = await requestAudioStream(inputMode, onStatus);
 
     const credential = await getAuthCredential();
     if (!credential?.value) throw new Error("Deepgram 인증 정보 발급 실패");
@@ -181,6 +186,8 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
 
     ws.onmessage = async (message) => {
       try {
+        deepgramMessageCount += 1;
+        lastDeepgramMessageAt = Date.now();
         let raw = message.data;
         if (raw instanceof Blob) raw = await raw.text();
         if (raw instanceof ArrayBuffer) raw = new TextDecoder().decode(raw);
@@ -218,9 +225,12 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
       if (isPaused) return;
 
       const float32 = event.inputBuffer.getChannelData(0);
+      const rms = computeRms(float32);
+      lastRms = Number.isFinite(rms) ? rms : 0;
       const downsampled = downsampleBuffer(float32, audioContext.sampleRate, TARGET_SAMPLE_RATE);
       const pcm = to16BitPCM(downsampled);
       ws.send(pcm);
+      audioChunkCount += 1;
     };
 
     source.connect(processor);
@@ -233,13 +243,83 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
       }
     }, 10000);
 
+    diagnosticsTimer = window.setInterval(() => {
+      if (!onDiagnostics) return;
+      onDiagnostics({
+        inputMode,
+        audioChunkCount,
+        deepgramMessageCount,
+        lastRms,
+        lastDeepgramMessageAt,
+      });
+    }, 1000);
+
     onStatus("Deepgram 실시간 스트림 연결됨");
+  }
+
+  async function requestAudioStream(mode, reportStatus) {
+    if (mode === "audio_element") {
+      if (!audioElement) {
+        throw new Error("테스트 음성 플레이어가 준비되지 않았습니다.");
+      }
+
+      if (!audioElement.src) {
+        throw new Error("업로드된 테스트 음성 파일이 없습니다.");
+      }
+
+      if (audioElement.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        await new Promise((resolve, reject) => {
+          const onReady = () => {
+            cleanup();
+            resolve();
+          };
+          const onError = () => {
+            cleanup();
+            reject(new Error("업로드 음성 파일 로드에 실패했습니다."));
+          };
+          const cleanup = () => {
+            audioElement.removeEventListener("canplay", onReady);
+            audioElement.removeEventListener("error", onError);
+          };
+          audioElement.addEventListener("canplay", onReady, { once: true });
+          audioElement.addEventListener("error", onError, { once: true });
+        });
+      }
+
+      const captureFn =
+        typeof audioElement.captureStream === "function"
+          ? audioElement.captureStream.bind(audioElement)
+          : typeof audioElement.mozCaptureStream === "function"
+            ? audioElement.mozCaptureStream.bind(audioElement)
+            : null;
+
+      if (!captureFn) {
+        throw new Error("이 브라우저는 오디오 요소 캡처(captureStream)를 지원하지 않습니다.");
+      }
+
+      reportStatus("테스트 모드: 업로드 음성 소스 연결 완료. 재생 버튼을 눌러 분석하세요.");
+      return captureFn();
+    }
+
+    reportStatus("마이크 권한 요청 중...");
+    return navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
   }
 
   function disconnect() {
     if (keepAliveTimer) {
       clearInterval(keepAliveTimer);
       keepAliveTimer = null;
+    }
+    if (diagnosticsTimer) {
+      clearInterval(diagnosticsTimer);
+      diagnosticsTimer = null;
     }
 
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -278,4 +358,14 @@ export function createDeepgramRealtimeClient({ getAuthCredential, onUtterance, o
   }
 
   return { connect, disconnect, pause, resume };
+}
+
+function computeRms(float32) {
+  if (!float32 || !float32.length) return 0;
+  let sumSquares = 0;
+  for (let i = 0; i < float32.length; i += 1) {
+    const sample = float32[i];
+    sumSquares += sample * sample;
+  }
+  return Math.sqrt(sumSquares / float32.length);
 }

@@ -7,6 +7,7 @@ const SILENCE_WINDOW_MS = (10 * 60 * 1000) / DEMO_TIME_SCALE;
 const MAX_FEED_ITEMS = 40;
 const ACTIVE_SPEAKER_HOLD_MS = 2200;
 const DEEPGRAM_TOKEN_ENDPOINT = "/api/deepgram/token";
+const DEEPGRAM_PRERECORDED_ENDPOINT = "/api/deepgram/prerecorded";
 const SHORT_UTTERANCE_MS = 900;
 const SHORT_UTTERANCE_WORDS = 2;
 const LOW_SPEAKER_CONFIDENCE = 0.6;
@@ -18,6 +19,9 @@ const UNKNOWN_LINK_GAP_MS = 1800;
 const UNKNOWN_NEW_SPEAKER_DELAY_MS = 9000;
 const UNKNOWN_NEW_SPEAKER_MIN_DURATION_MS = 1400;
 const UNKNOWN_NEW_SPEAKER_MIN_WORDS = 3;
+const DB_NAME = "meetingreferee-db";
+const DB_VERSION = 1;
+const TEST_SOURCE_STORE = "testSources";
 
 const SPEAKER_COLORS = [
   "#60a5fa",
@@ -52,6 +56,18 @@ const state = {
   lastFinalUtterance: null,
   lastObservedFinalUtterance: null,
   recentFinalUtterances: [],
+  testMode: false,
+  testSourceId: null,
+  testAudioBlob: null,
+  testAudioUrl: "",
+  testAudioName: "",
+  diagnostics: {
+    inputMode: "-",
+    audioChunkCount: 0,
+    deepgramMessageCount: 0,
+    lastRms: 0,
+    lastDeepgramMessageAt: null,
+  },
 };
 
 const el = {
@@ -69,6 +85,14 @@ const el = {
   elapsed: document.getElementById("meeting-elapsed"),
   pauseBtn: document.getElementById("pause-meeting"),
   dotLive: document.querySelector(".dot-live"),
+  testSourcePanel: document.getElementById("test-source-panel"),
+  testAudioPlayer: document.getElementById("test-audio-player"),
+  testAudioMeta: document.getElementById("test-audio-meta"),
+  diagnosticPanel: document.getElementById("diagnostic-panel"),
+  diagInputMode: document.getElementById("diag-input-mode"),
+  diagAudioLevel: document.getElementById("diag-audio-level"),
+  diagAudioFlow: document.getElementById("diag-audio-flow"),
+  diagDeepgramFlow: document.getElementById("diag-deepgram-flow"),
 };
 
 document.getElementById("end-meeting").addEventListener("click", endMeeting);
@@ -149,7 +173,7 @@ function getNextSpeakerId() {
   return `speaker_${maxIndex + 1}`;
 }
 
-async function startMeeting({ title, participantCount }) {
+async function startMeeting({ title, participantCount, testMode = false, testSourceId = null }) {
   const participants = parseParticipants(participantCount);
 
   state.meeting = {
@@ -158,16 +182,38 @@ async function startMeeting({ title, participantCount }) {
     participants,
     startAt: Date.now(),
   };
+  state.testMode = Boolean(testMode);
+  state.testSourceId = String(testSourceId || "");
   state.speakerStats = createSpeakerStats(participants);
 
+  if (state.testMode) {
+    await loadTestAudioSource(state.testSourceId);
+  }
+
+  setupTestSourcePanel();
   el.dashboardTitle.textContent = `${title} - 실시간 모니터링`;
   renderAll();
   startElapsedTimer();
 
+  if (state.testMode) {
+    updateDiagnostics({
+      inputMode: "prerecorded_file",
+      audioChunkCount: 0,
+      deepgramMessageCount: 0,
+      lastRms: 0,
+      lastDeepgramMessageAt: null,
+    });
+    await analyzeTestAudioWithPrerecorded();
+    return;
+  }
+
   const realtimeClient = createDeepgramRealtimeClient({
+    inputMode: "microphone",
+    audioElement: null,
     getAuthCredential: fetchDeepgramAuthCredential,
     onUtterance: handleUtterance,
     onStatus: setStatus,
+    onDiagnostics: updateDiagnostics,
     onError: (error) => {
       setStatus(`Deepgram 오류: ${error.message}`);
     },
@@ -611,6 +657,9 @@ function togglePause() {
 
   if (state.isPaused) {
     state.stream?.pause();
+    if (state.testMode && !el.testAudioPlayer.paused) {
+      el.testAudioPlayer.pause();
+    }
     clearInterval(state.elapsedTimer);
     state.elapsedTimer = null;
     state.activeSpeakerId = null;
@@ -618,16 +667,23 @@ function togglePause() {
     el.pauseBtn.textContent = "재개";
     el.pauseBtn.classList.add("is-paused");
     el.dotLive.classList.add("is-paused");
-    setStatus("일시정지됨 – 마이크 및 분석이 중단됩니다.");
+    setStatus("일시정지됨 – 오디오 입력 및 분석이 중단됩니다.");
     renderActiveSpeaker();
     renderLiveTranscript();
   } else {
     state.stream?.resume();
+    if (state.testMode && el.testAudioPlayer.paused) {
+      el.testAudioPlayer.play().catch(() => {});
+    }
     startElapsedTimer();
     el.pauseBtn.textContent = "일시정지";
     el.pauseBtn.classList.remove("is-paused");
     el.dotLive.classList.remove("is-paused");
-    setStatus("Deepgram 실시간 분석 재개");
+    if (state.testMode) {
+      setStatus("테스트 모드 재개");
+    } else {
+      setStatus("Deepgram 실시간 분석 재개");
+    }
   }
 }
 
@@ -637,6 +693,10 @@ function endMeeting() {
   state.stream?.disconnect();
   clearTimers();
   state.activeSpeakerId = null;
+  if (state.testAudioUrl) {
+    URL.revokeObjectURL(state.testAudioUrl);
+    state.testAudioUrl = "";
+  }
 
   const report = buildReport();
   sessionStorage.setItem("meetingReport", JSON.stringify(report));
@@ -833,6 +893,243 @@ function renderEvents() {
       return `<li><span class="tag ${cls}">${label}</span>${escapeHtml(e.message)}</li>`;
     })
     .join("");
+}
+
+function setupTestSourcePanel() {
+  if (!state.testMode) {
+    el.testSourcePanel.classList.add("hidden");
+    el.diagnosticPanel.classList.add("hidden");
+    el.testAudioPlayer.src = "";
+    el.testAudioMeta.textContent = "";
+    return;
+  }
+
+  el.testSourcePanel.classList.remove("hidden");
+  el.diagnosticPanel.classList.remove("hidden");
+  el.testAudioPlayer.src = state.testAudioUrl;
+  el.testAudioMeta.textContent = `파일: ${state.testAudioName || "알 수 없음"}`;
+}
+
+function updateDiagnostics(data) {
+  state.diagnostics = {
+    inputMode: data.inputMode ?? "-",
+    audioChunkCount: Number(data.audioChunkCount ?? 0),
+    deepgramMessageCount: Number(data.deepgramMessageCount ?? 0),
+    lastRms: Number(data.lastRms ?? 0),
+    lastDeepgramMessageAt: data.lastDeepgramMessageAt ?? null,
+  };
+  renderDiagnostics();
+}
+
+function renderDiagnostics() {
+  const d = state.diagnostics;
+  const modeText = d.inputMode === "prerecorded_file" ? "업로드 파일 사전 분석" : d.inputMode;
+  el.diagInputMode.textContent = `입력 모드: ${modeText}`;
+  el.diagAudioLevel.textContent = `오디오 레벨(RMS): ${d.lastRms.toFixed(4)}`;
+  el.diagAudioFlow.textContent = `오디오 전송 청크: ${d.audioChunkCount}`;
+  const lastAt = d.lastDeepgramMessageAt
+    ? new Date(d.lastDeepgramMessageAt).toLocaleTimeString("ko-KR")
+    : "-";
+  el.diagDeepgramFlow.textContent = `Deepgram 메시지: ${d.deepgramMessageCount} (마지막 ${lastAt})`;
+}
+
+async function analyzeTestAudioWithPrerecorded() {
+  if (!state.testAudioBlob) {
+    throw new Error("테스트 음성 파일이 로드되지 않았습니다.");
+  }
+
+  setStatus("업로드 음성 파일을 Deepgram 사전 분석 중...");
+  const res = await fetch(DEEPGRAM_PRERECORDED_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": state.testAudioBlob.type || "application/octet-stream" },
+    body: state.testAudioBlob,
+  });
+
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = payload?.detail?.err_msg || payload?.detail?.error || payload?.message || `HTTP ${res.status}`;
+    throw new Error(`파일 분석 실패 (${detail})`);
+  }
+
+  const utterances = extractUtterancesFromPrerecorded(payload);
+  if (!utterances.length) {
+    setStatus("분석 완료: 발화를 추출하지 못했습니다. 파일 음량/언어/내용을 확인하세요.");
+    return;
+  }
+
+  state.utterances = [];
+  state.events = [];
+  state.warnings = [];
+  state.lastFinalUtterance = null;
+  state.lastObservedFinalUtterance = null;
+  state.recentFinalUtterances = [];
+  resetSpeakerStats();
+
+  utterances.forEach((utterance) => handleUtterance(utterance));
+
+  updateDiagnostics({
+    inputMode: "prerecorded_file",
+    audioChunkCount: utterances.length,
+    deepgramMessageCount: utterances.length,
+    lastRms: 0,
+    lastDeepgramMessageAt: Date.now(),
+  });
+
+  setStatus(`사전 분석 완료: 발화 ${utterances.length}건`);
+}
+
+function extractUtterancesFromPrerecorded(payload) {
+  const result = payload?.results ?? payload;
+  const utterancesFromResult = result?.utterances;
+  if (Array.isArray(utterancesFromResult) && utterancesFromResult.length) {
+    return utterancesFromResult
+      .map(normalizePrerecordedUtterance)
+      .filter(Boolean)
+      .sort((a, b) => a.start_time - b.start_time)
+      .map((utterance, idx) => ({ ...utterance, created_at: Date.now() + idx }));
+  }
+
+  const words = result?.channels?.[0]?.alternatives?.[0]?.words ?? [];
+  if (!words.length) return [];
+
+  const grouped = [];
+  let current = null;
+  for (const word of words) {
+    const speakerNum = Number(word?.speaker);
+    if (!Number.isFinite(speakerNum)) continue;
+
+    const token = word?.punctuated_word || word?.word || "";
+    if (!token) continue;
+
+    const startSec = Number(word?.start ?? 0);
+    const endSec = Number(word?.end ?? startSec);
+    if (!current) {
+      current = {
+        speaker: speakerNum,
+        start: startSec,
+        end: endSec,
+        words: [token],
+        sentimentScores: [],
+      };
+      if (typeof word?.sentiment_score === "number") current.sentimentScores.push(word.sentiment_score);
+      continue;
+    }
+
+    const isSameSpeaker = current.speaker === speakerNum;
+    const gap = Math.max(0, startSec - current.end);
+    if (isSameSpeaker && gap <= 1.2) {
+      current.end = Math.max(current.end, endSec);
+      current.words.push(token);
+      if (typeof word?.sentiment_score === "number") current.sentimentScores.push(word.sentiment_score);
+    } else {
+      grouped.push(current);
+      current = {
+        speaker: speakerNum,
+        start: startSec,
+        end: endSec,
+        words: [token],
+        sentimentScores: typeof word?.sentiment_score === "number" ? [word.sentiment_score] : [],
+      };
+    }
+  }
+  if (current) grouped.push(current);
+
+  return grouped.map((group, idx) => {
+    const avg = group.sentimentScores.length
+      ? group.sentimentScores.reduce((sum, score) => sum + score, 0) / group.sentimentScores.length
+      : 0;
+    return {
+      id: `pre-${Date.now()}-${idx}`,
+      speaker_id: `speaker_${group.speaker + 1}`,
+      speaker_confidence: 1,
+      speaker_word_count: group.words.length,
+      transcript: group.words.join(" "),
+      start_time: Math.round(group.start * 1000),
+      end_time: Math.round(group.end * 1000),
+      duration: Math.max(100, Math.round((group.end - group.start) * 1000)),
+      created_at: Date.now() + idx,
+      is_final: true,
+      sentiment: avg > 0.25 ? "positive" : avg < -0.25 ? "negative" : "neutral",
+      sentimentScore: Math.round(avg * 100) / 100,
+    };
+  });
+}
+
+function normalizePrerecordedUtterance(input) {
+  const transcript = String(input?.transcript || "").trim();
+  if (!transcript) return null;
+
+  const speakerNum = Number(input?.speaker ?? input?.words?.[0]?.speaker);
+  const startSec = Number(input?.start ?? 0);
+  const endSec = Number(input?.end ?? startSec);
+  const words = Array.isArray(input?.words) ? input.words : [];
+  const sentimentScores = words
+    .map((word) => word?.sentiment_score)
+    .filter((score) => typeof score === "number" && Number.isFinite(score));
+
+  const avg = sentimentScores.length
+    ? sentimentScores.reduce((sum, score) => sum + score, 0) / sentimentScores.length
+    : 0;
+
+  return {
+    id: `pre-${Math.random().toString(36).slice(2, 10)}`,
+    speaker_id: Number.isFinite(speakerNum) ? `speaker_${speakerNum + 1}` : "unknown",
+    speaker_confidence: Number(input?.confidence ?? 1),
+    speaker_word_count: words.length || countTranscriptWords(transcript),
+    transcript,
+    start_time: Math.round(startSec * 1000),
+    end_time: Math.round(endSec * 1000),
+    duration: Math.max(100, Math.round((endSec - startSec) * 1000)),
+    created_at: Date.now(),
+    is_final: true,
+    sentiment: avg > 0.25 ? "positive" : avg < -0.25 ? "negative" : "neutral",
+    sentimentScore: Math.round(avg * 100) / 100,
+  };
+}
+
+async function loadTestAudioSource(testSourceId) {
+  if (!testSourceId) {
+    throw new Error("테스트 음성 파일 참조 정보가 없습니다.");
+  }
+
+  const record = await readTestSource(testSourceId);
+  if (!record?.file) {
+    throw new Error("테스트 음성 파일을 찾을 수 없습니다. 첫 화면에서 다시 업로드해주세요.");
+  }
+
+  state.testAudioBlob = record.file;
+  state.testAudioName = record.name || "업로드 음성";
+  state.testAudioUrl = URL.createObjectURL(record.file);
+}
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(TEST_SOURCE_STORE)) {
+        db.createObjectStore(TEST_SOURCE_STORE, { keyPath: "id" });
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("indexedDB open failed"));
+  });
+}
+
+async function readTestSource(id) {
+  const db = await openDb();
+
+  const record = await new Promise((resolve, reject) => {
+    const tx = db.transaction(TEST_SOURCE_STORE, "readonly");
+    const req = tx.objectStore(TEST_SOURCE_STORE).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error("indexedDB read failed"));
+  });
+
+  db.close();
+  return record;
 }
 
 // ─── 유틸리티 ─────────────────────────────────────────────────────────────────
