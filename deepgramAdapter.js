@@ -43,17 +43,24 @@ function to16BitPCM(float32) {
   return buffer;
 }
 
-function extractSpeakerId(alt) {
+function extractSpeakerMetadata(alt) {
   const speakers = (alt?.words ?? [])
     .map((word) => Number(word?.speaker))
     .filter((n) => Number.isFinite(n));
 
-  if (!speakers.length) return null;
+  if (!speakers.length) {
+    return { speakerId: null, confidence: 0, wordCount: 0 };
+  }
 
   const counts = new Map();
   speakers.forEach((s) => counts.set(s, (counts.get(s) ?? 0) + 1));
-  const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  return dominant === undefined ? null : `speaker_${dominant + 1}`;
+  const [dominant, dominantCount] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+
+  return {
+    speakerId: dominant === undefined ? null : `speaker_${dominant + 1}`,
+    confidence: dominantCount ? dominantCount / speakers.length : 0,
+    wordCount: speakers.length,
+  };
 }
 
 function extractSentiment(alt) {
@@ -87,10 +94,13 @@ function parseDeepgramResult(payload) {
   const endSec = lastWord?.end ?? payload.duration ?? startSec;
 
   const isFinal = Boolean(payload.is_final);
+  const speakerMeta = isFinal ? extractSpeakerMetadata(alt) : { speakerId: null, confidence: 0, wordCount: 0 };
   const { sentiment, score: sentimentScore } = isFinal ? extractSentiment(alt) : { sentiment: null, score: 0 };
   return {
     id: uuid(),
-    speaker_id: isFinal ? extractSpeakerId(alt) : null,
+    speaker_id: speakerMeta.speakerId,
+    speaker_confidence: speakerMeta.confidence,
+    speaker_word_count: speakerMeta.wordCount,
     transcript: text,
     start_time: Math.round(startSec * 1000),
     end_time: Math.round(endSec * 1000),
