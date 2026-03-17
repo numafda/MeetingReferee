@@ -35,11 +35,23 @@
               참여자 수
               <input id="meeting-participants" type="number" min="2" max="20" value="4" />
             </label>
+            <label class="checkbox-row">
+              <input id="test-mode" type="checkbox" />
+              <span>테스트 모드 (음성 파일 업로드)</span>
+            </label>
+            <label id="test-audio-wrap" class="hidden">
+              테스트 음성 파일
+              <input
+                id="test-audio-file"
+                type="file"
+                accept="audio/*"
+              />
+            </label>
           </div>
           <div class="actions">
             <button id="start-meeting" class="btn btn-primary">회의 시작</button>
           </div>
-          <p class="hint">프로토타입은 모의 Deepgram 스트림으로 동작하며, 1초를 10초로 스케일링합니다.</p>
+          <p class="hint">테스트 모드에서는 업로드한 음성 파일을 대시보드에서 재생해 분석합니다.</p>
         </article>
       </section>
     </main>

@@ -138,6 +138,17 @@ input {
   padding: 10px;
 }
 
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
 .actions {
   margin-top: 14px;
   display: flex;
@@ -284,6 +295,19 @@ input {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.test-source-panel {
+  margin-top: 12px;
+}
+
+.test-audio-player {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.diagnostic-panel {
+  margin-top: 12px;
 }
 
 .speaker-card {
