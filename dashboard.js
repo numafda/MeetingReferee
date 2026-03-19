@@ -874,15 +874,36 @@ function renderSentimentSummary() {
     .join("");
 }
 
+function groupUtterancesBySpeaker(utterances) {
+  const groups = [];
+  for (const u of utterances) {
+    const last = groups[groups.length - 1];
+    if (last && last.speaker_id === u.speaker_id) {
+      last.items.push(u);
+      last.totalDuration += u.duration;
+    } else {
+      groups.push({ speaker_id: u.speaker_id, items: [u], totalDuration: u.duration });
+    }
+  }
+  return groups;
+}
+
 function renderUtterances() {
-  el.utteranceFeed.innerHTML = state.utterances
-    .map((u) => {
-      const speakerName = state.speakerStats.get(u.speaker_id)?.name ?? "미확정 화자";
-      const color = getSpeakerColor(u.speaker_id);
-      const sEmoji = u.sentiment === "positive" ? "😊" : u.sentiment === "negative" ? "😠" : "😐";
-      return `<li><strong style="color:${color}">${escapeHtml(speakerName)}</strong> · ${(u.duration / 1000).toFixed(1)}초 <span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span><br/>${escapeHtml(u.transcript)}</li>`;
+  const groups = groupUtterancesBySpeaker([...state.utterances].reverse());
+  el.utteranceFeed.innerHTML = groups
+    .map((g) => {
+      const speakerName = state.speakerStats.get(g.speaker_id)?.name ?? "미확정 화자";
+      const color = getSpeakerColor(g.speaker_id);
+      const lines = g.items
+        .map((u) => {
+          const sEmoji = u.sentiment === "positive" ? "😊" : u.sentiment === "negative" ? "😠" : "😐";
+          return `<p class="bubble-line"><span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span>${escapeHtml(u.transcript)}</p>`;
+        })
+        .join("");
+      return `<li class="bubble"><div class="bubble-header"><strong style="color:${color}">${escapeHtml(speakerName)}</strong> · ${(g.totalDuration / 1000).toFixed(1)}초 · ${g.items.length}건</div>${lines}</li>`;
     })
     .join("");
+  el.utteranceFeed.scrollTop = el.utteranceFeed.scrollHeight;
 }
 
 function renderEvents() {
