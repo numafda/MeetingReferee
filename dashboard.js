@@ -23,6 +23,12 @@ const DB_NAME = "meetingreferee-db";
 const DB_VERSION = 1;
 const TEST_SOURCE_STORE = "testSources";
 
+const NOTIFICATION_TITLES = {
+  alert: "🚨 독점 경고",
+  warn: "⚠️ 주의",
+  interrupt: "🗣️ 끼어들기",
+};
+
 const SPEAKER_COLORS = [
   "#60a5fa",
   "#34d399",
@@ -75,7 +81,6 @@ const el = {
   status: document.getElementById("connection-status"),
   speakerStats: document.getElementById("speaker-stats"),
   utteranceFeed: document.getElementById("utterance-feed"),
-  eventFeed: document.getElementById("event-feed"),
   ratioFeed: document.getElementById("ratio-feed"),
   balanceScore: document.getElementById("balance-score"),
   sentimentSummary: document.getElementById("sentiment-summary"),
@@ -174,6 +179,10 @@ function getNextSpeakerId() {
 }
 
 async function startMeeting({ title, participantCount, testMode = false, testSourceId = null }) {
+  if ("Notification" in window && Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+
   const participants = parseParticipants(participantCount);
 
   state.meeting = {
@@ -264,7 +273,6 @@ function startElapsedTimer() {
     reviewUnknownUtterances();
     renderElapsed();
     detectSilence();
-    renderEvents();
     renderSpeakerStats();
   }, 1000);
 }
@@ -574,6 +582,28 @@ function recomputeTalkRatios() {
 function pushEvent(kind, message) {
   state.events.unshift({ id: `${Date.now()}-${Math.random()}`, kind, message, at: Date.now() });
   if (state.events.length > MAX_FEED_ITEMS) state.events.length = MAX_FEED_ITEMS;
+  sendNotification(kind, message);
+}
+
+function sendNotification(kind, message) {
+  const title = NOTIFICATION_TITLES[kind] || "회의 알림";
+
+  if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+    new Notification(title, { body: message, tag: kind + "-" + Date.now() });
+  } else {
+    showToast(kind, title, message);
+  }
+}
+
+function showToast(kind, title, message) {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${kind}`;
+  toast.innerHTML = `<strong>${title}</strong><span>${escapeHtml(message)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.classList.add("toast-exit"); }, 4000);
+  setTimeout(() => { toast.remove(); }, 4500);
 }
 
 function detectDominance() {
@@ -760,7 +790,6 @@ function renderAll() {
   renderBalanceScore();
   renderSentimentSummary();
   renderUtterances();
-  renderEvents();
 }
 
 function renderElapsed() {
@@ -906,15 +935,6 @@ function renderUtterances() {
   el.utteranceFeed.scrollTop = el.utteranceFeed.scrollHeight;
 }
 
-function renderEvents() {
-  el.eventFeed.innerHTML = state.events
-    .map((e) => {
-      const cls = e.kind === "alert" ? "alert" : e.kind === "interrupt" ? "interrupt" : "warn";
-      const label = e.kind === "alert" ? "독점" : e.kind === "interrupt" ? "끼어들기" : "주의";
-      return `<li><span class="tag ${cls}">${label}</span>${escapeHtml(e.message)}</li>`;
-    })
-    .join("");
-}
 
 function setupTestSourcePanel() {
   if (!state.testMode) {
