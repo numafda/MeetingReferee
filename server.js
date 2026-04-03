@@ -219,6 +219,71 @@ async function handlePrerecordedTranscription(req, res) {
   }
 }
 
+async function handleSummarize(req, res) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    sendJson(res, 500, {
+      error: "ANTHROPIC_API_KEY is not configured",
+      message: "환경변수 ANTHROPIC_API_KEY를 설정해 주세요.",
+    });
+    return;
+  }
+
+  try {
+    const rawBody = await readBody(req);
+    const { transcript } = JSON.parse(rawBody);
+    if (!transcript) {
+      sendJson(res, 400, { error: "missing_transcript", message: "요약할 회의 내용이 없습니다." });
+      return;
+    }
+
+    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: `다음은 회의 발화 기록입니다. 발화 내용만을 바탕으로 한국어로 간결하게 요약해 주세요.
+핵심 안건, 주요 결정사항, 후속 조치(Action Item)가 있다면 구분하여 정리해 주세요.
+
+---
+${transcript}
+---`,
+          },
+        ],
+      }),
+    });
+
+    const text = await claudeRes.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { raw: text };
+    }
+
+    if (!claudeRes.ok) {
+      sendJson(res, claudeRes.status, { error: "claude_api_failed", detail: payload });
+      return;
+    }
+
+    const summary = payload.content?.[0]?.text || "";
+    sendJson(res, 200, { summary });
+  } catch (error) {
+    sendJson(res, 500, {
+      error: "summarize_internal_error",
+      message: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
 function resolveStaticPath(urlPath) {
   const cleanPath = decodeURIComponent(urlPath.split("?")[0]);
   const target = cleanPath === "/" ? "/index.html" : cleanPath;
@@ -272,6 +337,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/api/deepgram/prerecorded") {
     await handlePrerecordedTranscription(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/summarize") {
+    await handleSummarize(req, res);
     return;
   }
 

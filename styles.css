@@ -496,6 +496,13 @@ input {
   font-size: 36px;
 }
 
+.report-summary {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
 .report-speaker-name {
   font-weight: 700;
 }

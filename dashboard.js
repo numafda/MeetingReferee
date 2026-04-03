@@ -771,6 +771,14 @@ function buildReport() {
     })),
     warnings: state.warnings,
     events: state.events,
+    transcript: [...state.utterances]
+      .reverse()
+      .filter((u) => u.is_final && u.speaker_id !== "unknown")
+      .map((u) => {
+        const speaker = state.speakerStats.get(u.speaker_id);
+        return `${speaker?.name || u.speaker_id}: ${u.transcript}`;
+      })
+      .join("\n"),
   };
 }
 

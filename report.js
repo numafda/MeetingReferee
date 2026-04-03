@@ -16,6 +16,7 @@ if (!report) {
   window.location.replace("/");
 } else {
   renderReport(report);
+  fetchSummary(report);
 }
 
 document.getElementById("restart").addEventListener("click", () => {
@@ -24,9 +25,44 @@ document.getElementById("restart").addEventListener("click", () => {
   window.location.href = "/";
 });
 
+let summaryText = "";
+
 document.getElementById("export-md").addEventListener("click", () => {
-  downloadFile(buildMarkdown(report), `${report.title.replace(/\s+/g, "_")}-report.md`, "text/markdown");
+  downloadFile(buildMarkdown(report, summaryText), `${report.title.replace(/\s+/g, "_")}-report.md`, "text/markdown");
 });
+
+async function fetchSummary(report) {
+  const el = document.getElementById("report-summary");
+  if (!report.transcript) {
+    el.textContent = "요약할 발화 기록이 없습니다.";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/summarize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: report.transcript }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      el.textContent = `요약 생성 실패: ${data.message || data.error}`;
+      return;
+    }
+
+    summaryText = data.summary;
+    el.innerHTML = formatSummary(data.summary);
+  } catch (err) {
+    el.textContent = `요약 요청 중 오류: ${err.message}`;
+  }
+}
+
+function formatSummary(text) {
+  return escapeHtml(text)
+    .replace(/\n/g, "<br>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
 
 function downloadFile(content, filename, type) {
   const blob = new Blob([content], { type });
@@ -38,7 +74,7 @@ function downloadFile(content, filename, type) {
   URL.revokeObjectURL(url);
 }
 
-function buildMarkdown(report) {
+function buildMarkdown(report, summary) {
   const date = new Date(report.generatedAt).toLocaleString("ko-KR");
   const sentimentLabel = (avg) => avg > 0.25 ? "긍정 😊" : avg < -0.25 ? "부정 😠" : "중립 😐";
 
@@ -59,6 +95,12 @@ function buildMarkdown(report) {
 **품질 점수:** ${report.score} / 100
 **균형 지수:** ${report.balanceScore}
 **평가:** ${report.feedback}
+
+---
+
+## 회의 내용 요약
+
+${summary || "요약 없음"}
 
 ---
 
