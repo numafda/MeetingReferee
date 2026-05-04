@@ -102,6 +102,76 @@ const el = {
 
 document.getElementById("end-meeting").addEventListener("click", endMeeting);
 document.getElementById("pause-meeting").addEventListener("click", togglePause);
+el.speakerStats.addEventListener("click", handleSpeakerStatsClick);
+
+const colorPickerEl = document.getElementById("speaker-color-picker");
+const speakerMenuEl = document.getElementById("speaker-menu");
+let menuTargetSpeakerId = null;
+let colorPickerTargetSpeakerId = null;
+
+colorPickerEl.addEventListener("input", (e) => {
+  if (!colorPickerTargetSpeakerId) return;
+  const stat = state.speakerStats.get(colorPickerTargetSpeakerId);
+  if (!stat) return;
+  stat.customColor = e.target.value;
+  renderAll();
+});
+colorPickerEl.addEventListener("change", () => {
+  colorPickerTargetSpeakerId = null;
+});
+
+speakerMenuEl.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  const stat = state.speakerStats.get(menuTargetSpeakerId);
+  closeSpeakerMenu();
+  if (!stat) return;
+
+  if (btn.dataset.action === "rename") {
+    const nextName = window.prompt("참여자 이름을 입력하세요.", stat.name);
+    if (nextName === null) return;
+    const trimmed = nextName.trim();
+    if (!trimmed) return;
+    stat.name = trimmed;
+    renderAll();
+  } else if (btn.dataset.action === "recolor") {
+    colorPickerTargetSpeakerId = stat.speakerId;
+    colorPickerEl.value = getSpeakerColor(stat.speakerId);
+    colorPickerEl.click();
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (speakerMenuEl.classList.contains("hidden")) return;
+  if (speakerMenuEl.contains(e.target)) return;
+  if (e.target.closest('[data-action="open-menu"]')) return;
+  closeSpeakerMenu();
+});
+
+function openSpeakerMenu(triggerBtn) {
+  menuTargetSpeakerId = triggerBtn.dataset.speakerId;
+  speakerMenuEl.classList.remove("hidden");
+  const rect = triggerBtn.getBoundingClientRect();
+  const menuWidth = speakerMenuEl.offsetWidth;
+  speakerMenuEl.style.top = `${rect.bottom + 4}px`;
+  speakerMenuEl.style.left = `${rect.right - menuWidth}px`;
+}
+
+function closeSpeakerMenu() {
+  speakerMenuEl.classList.add("hidden");
+  menuTargetSpeakerId = null;
+}
+
+function handleSpeakerStatsClick(e) {
+  const btn = e.target.closest('[data-action="open-menu"]');
+  if (!btn) return;
+  e.stopPropagation();
+  if (!speakerMenuEl.classList.contains("hidden") && menuTargetSpeakerId === btn.dataset.speakerId) {
+    closeSpeakerMenu();
+    return;
+  }
+  openSpeakerMenu(btn);
+}
 
 // ─── 초기화 ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +197,7 @@ function createSpeakerStats(participants) {
       {
         speakerId: `speaker_${idx + 1}`,
         name,
+        customColor: null,
         talkTimeMs: 0,
         talkRatio: 0,
         turnCount: 0,
@@ -152,6 +223,7 @@ function ensureSpeakerRegistered(speakerId) {
   state.speakerStats.set(speakerId, {
     speakerId,
     name: buildSpeakerName(speakerId),
+    customColor: null,
     talkTimeMs: 0,
     talkRatio: 0,
     turnCount: 0,
@@ -837,6 +909,7 @@ function renderSpeakerStats() {
       const sentimentLabel = avgScore > 0.25 ? "긍정" : avgScore < -0.25 ? "부정" : "중립";
 
       return `<article class="speaker-card ${hasWarning ? "is-warning" : ""} ${isActive ? "is-active" : ""}" style="border-color:${isActive ? color : ""}">
+        <button type="button" class="speaker-menu-btn" data-action="open-menu" data-speaker-id="${s.speakerId}" aria-label="옵션">⋮</button>
         <p class="speaker-name"><span class="speaker-dot" style="background:${color}"></span>${escapeHtml(s.name)}</p>
         <p class="speaker-meta">지분 ${Math.round(s.talkRatio * 100)}% · 턴 ${s.turnCount}회</p>
         <p class="speaker-meta">총 발언 ${(s.talkTimeMs / 1000).toFixed(1)}초${s.interruptionCount ? ` · 끼어들기 ${s.interruptionCount}회` : ""}</p>
@@ -1202,6 +1275,8 @@ function getBalanceScore() {
 }
 
 function getSpeakerColor(speakerId) {
+  const stat = state.speakerStats.get(speakerId);
+  if (stat?.customColor) return stat.customColor;
   if (!speakerId || !speakerId.startsWith("speaker_")) return "#94a3b8";
   const index = Number(speakerId.replace("speaker_", "")) - 1;
   return SPEAKER_COLORS[((Number.isNaN(index) ? 0 : index) + SPEAKER_COLORS.length) % SPEAKER_COLORS.length];

@@ -311,6 +311,7 @@ input {
 }
 
 .speaker-card {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px;
@@ -339,6 +340,69 @@ input {
   width: 9px;
   height: 9px;
   border-radius: 999px;
+}
+
+.speaker-menu-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.speaker-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.speaker-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 130px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+}
+
+.speaker-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.speaker-menu button:hover {
+  background: var(--panel-soft);
+}
+
+.hidden-color-picker {
+  position: fixed;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  border: none;
 }
 
 .speaker-meta {
