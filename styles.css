@@ -443,6 +443,19 @@ input {
   margin-bottom: 6px;
 }
 
+.bubble-ai {
+  border-color: rgba(139, 92, 246, 0.5);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));
+}
+
+.bubble-ai .bubble-header strong {
+  color: #c4b5fd;
+}
+
+.bubble-ai .bubble-line {
+  color: #e9d5ff;
+}
+
 .bubble .bubble-line {
   margin: 0;
   padding: 3px 0;

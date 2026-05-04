@@ -284,6 +284,80 @@ ${transcript}
   }
 }
 
+async function handleEvaluateMeeting(req, res) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    sendJson(res, 500, {
+      error: "ANTHROPIC_API_KEY is not configured",
+      message: "환경변수 ANTHROPIC_API_KEY를 설정해 주세요.",
+    });
+    return;
+  }
+
+  try {
+    const rawBody = await readBody(req);
+    const { transcript, speakerStats } = JSON.parse(rawBody);
+    if (!transcript) {
+      sendJson(res, 400, { error: "missing_transcript", message: "평가할 회의 내용이 없습니다." });
+      return;
+    }
+
+    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: `진행 중인 회의의 최근 5분 데이터를 분석하여 회의 품질에 대한 짧고 구체적인 피드백을 한국어로 제공해 주세요.
+
+다음 관점 중 가장 시급한 1~2가지에 집중해 주세요:
+- 언성을 높이거나 감정이 격앙된 참가자에게 주의 권고
+- 침묵 참가자에게 회의 내용에 맞는 구체적인 질문 제안
+- 발언 독점 화자 지적
+- 회의가 잘 진행되고 있다면 짧은 칭찬
+
+응답은 2~3문장 이내, 100자 이내로 작성하고, 인사말이나 머리말 없이 본 내용만 작성해 주세요.
+
+[화자 통계]
+${speakerStats || "없음"}
+
+[최근 발화]
+${transcript}`,
+          },
+        ],
+      }),
+    });
+
+    const text = await claudeRes.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { raw: text };
+    }
+
+    if (!claudeRes.ok) {
+      sendJson(res, claudeRes.status, { error: "claude_api_failed", detail: payload });
+      return;
+    }
+
+    const evaluation = payload.content?.[0]?.text || "";
+    sendJson(res, 200, { evaluation });
+  } catch (error) {
+    sendJson(res, 500, {
+      error: "evaluate_internal_error",
+      message: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
 function resolveStaticPath(urlPath) {
   const cleanPath = decodeURIComponent(urlPath.split("?")[0]);
   const target = cleanPath === "/" ? "/index.html" : cleanPath;
@@ -342,6 +416,11 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && req.url === "/api/summarize") {
     await handleSummarize(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/evaluate-meeting") {
+    await handleEvaluateMeeting(req, res);
     return;
   }
 

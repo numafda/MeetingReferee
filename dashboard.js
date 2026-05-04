@@ -23,6 +23,9 @@ const DB_NAME = "meetingreferee-db";
 const DB_VERSION = 1;
 const TEST_SOURCE_STORE = "testSources";
 
+const EVALUATION_INTERVAL_MS = (5 * 60 * 1000) / DEMO_TIME_SCALE;
+const EVALUATE_ENDPOINT = "/api/evaluate-meeting";
+
 const NOTIFICATION_TITLES = {
   alert: "🚨 독점 경고",
   warn: "⚠️ 주의",
@@ -48,6 +51,9 @@ const state = {
   meeting: null,
   speakerStats: new Map(),
   utterances: [],
+  aiEvaluations: [],
+  evaluationTimer: null,
+  isEvaluating: false,
   events: [],
   warnings: [],
   stream: null,
@@ -347,6 +353,8 @@ function startElapsedTimer() {
     detectSilence();
     renderSpeakerStats();
   }, 1000);
+
+  state.evaluationTimer = window.setInterval(requestMeetingEvaluation, EVALUATION_INTERVAL_MS);
 }
 
 function clearTimers() {
@@ -357,6 +365,10 @@ function clearTimers() {
   if (state.activeSpeakerTimer) {
     clearTimeout(state.activeSpeakerTimer);
     state.activeSpeakerTimer = null;
+  }
+  if (state.evaluationTimer) {
+    clearInterval(state.evaluationTimer);
+    state.evaluationTimer = null;
   }
 }
 
@@ -676,6 +688,62 @@ function showToast(kind, title, message) {
   container.appendChild(toast);
   setTimeout(() => { toast.classList.add("toast-exit"); }, 4000);
   setTimeout(() => { toast.remove(); }, 4500);
+}
+
+async function requestMeetingEvaluation() {
+  if (state.isEvaluating || state.isPaused) return;
+  if (!state.utterances.length) return;
+
+  const finalUtterances = [...state.utterances]
+    .reverse()
+    .filter((u) => u.is_final && u.speaker_id !== "unknown");
+  if (!finalUtterances.length) return;
+
+  const transcript = finalUtterances
+    .slice(-30)
+    .map((u) => {
+      const speaker = state.speakerStats.get(u.speaker_id);
+      return `${speaker?.name || u.speaker_id}: ${u.transcript}`;
+    })
+    .join("\n");
+
+  const speakerStatsText = [...state.speakerStats.values()]
+    .map((s) => {
+      const avgScore = s.turnCount ? s.sentimentScoreSum / s.turnCount : 0;
+      const sentimentLabel = avgScore > 0.25 ? "긍정" : avgScore < -0.25 ? "부정" : "중립";
+      const silentSec = s.lastSpokeAt ? Math.round((Date.now() - s.lastSpokeAt) / 1000) : "회의 시작 후 발언 없음";
+      return `${s.name}: 지분 ${Math.round(s.talkRatio * 100)}%, ${s.turnCount}턴, 감정 ${sentimentLabel}, 마지막 발언 ${typeof silentSec === "number" ? silentSec + "초 전" : silentSec}`;
+    })
+    .join("\n");
+
+  state.isEvaluating = true;
+  try {
+    const res = await fetch(EVALUATE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, speakerStats: speakerStatsText }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.warn("AI 평가 요청 실패:", res.status, data);
+      return;
+    }
+    if (!data.evaluation) {
+      console.warn("AI 평가 응답에 evaluation 필드 없음:", data);
+      return;
+    }
+
+    state.aiEvaluations.push({
+      id: `ai-${Date.now()}`,
+      message: data.evaluation,
+      createdAt: Date.now(),
+    });
+    renderUtterances();
+  } catch (err) {
+    console.warn("AI 평가 요청 중 오류:", err);
+  } finally {
+    state.isEvaluating = false;
+  }
 }
 
 function detectDominance() {
@@ -999,9 +1067,28 @@ function groupUtterancesBySpeaker(utterances) {
 }
 
 function renderUtterances() {
-  const groups = groupUtterancesBySpeaker([...state.utterances].reverse());
-  el.utteranceFeed.innerHTML = groups
-    .map((g) => {
+  const utterances = [...state.utterances].reverse();
+  const groups = groupUtterancesBySpeaker(utterances);
+
+  const groupItems = groups.map((g) => ({
+    type: "group",
+    time: g.items[g.items.length - 1]?.created_at ?? 0,
+    data: g,
+  }));
+  const aiItems = state.aiEvaluations.map((e) => ({
+    type: "ai",
+    time: e.createdAt,
+    data: e,
+  }));
+
+  const merged = [...groupItems, ...aiItems].sort((a, b) => a.time - b.time);
+
+  el.utteranceFeed.innerHTML = merged
+    .map((item) => {
+      if (item.type === "ai") {
+        return `<li class="bubble bubble-ai"><div class="bubble-header"><strong>🤖 AI 회의 평가</strong></div><p class="bubble-line">${escapeHtml(item.data.message)}</p></li>`;
+      }
+      const g = item.data;
       const speakerName = state.speakerStats.get(g.speaker_id)?.name ?? "미확정 화자";
       const color = getSpeakerColor(g.speaker_id);
       const lines = g.items
@@ -1080,6 +1167,7 @@ async function analyzeTestAudioWithPrerecorded() {
   }
 
   state.utterances = [];
+  state.aiEvaluations = [];
   state.events = [];
   state.warnings = [];
   state.lastFinalUtterance = null;
@@ -1098,6 +1186,7 @@ async function analyzeTestAudioWithPrerecorded() {
   });
 
   setStatus(`사전 분석 완료: 발화 ${utterances.length}건`);
+  requestMeetingEvaluation();
 }
 
 function extractUtterancesFromPrerecorded(payload) {
