@@ -443,6 +443,53 @@ input {
   margin-bottom: 6px;
 }
 
+.bubble-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.bubble-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.reassign-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.bubble-line:hover .reassign-btn {
+  opacity: 0.7;
+}
+
+.reassign-btn:hover {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.reassign-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reassign-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
 .bubble-ai {
   border-color: rgba(139, 92, 246, 0.5);
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));

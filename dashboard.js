@@ -154,6 +154,62 @@ document.addEventListener("click", (e) => {
   closeSpeakerMenu();
 });
 
+const reassignMenuEl = document.getElementById("reassign-menu");
+let reassignTargetUtteranceId = null;
+
+el.utteranceFeed.addEventListener("click", handleUtteranceFeedClick);
+
+reassignMenuEl.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-speaker-id]");
+  if (!btn) return;
+  const newSpeakerId = btn.dataset.speakerId;
+  const utterance = state.utterances.find((u) => u.id === reassignTargetUtteranceId);
+  closeReassignMenu();
+  if (!utterance || utterance.speaker_id === newSpeakerId) return;
+  utterance.speaker_id = newSpeakerId;
+  rebuildDerivedState();
+  renderAll();
+});
+
+document.addEventListener("click", (e) => {
+  if (reassignMenuEl.classList.contains("hidden")) return;
+  if (reassignMenuEl.contains(e.target)) return;
+  if (e.target.closest('[data-action="reassign-utterance"]')) return;
+  closeReassignMenu();
+});
+
+function handleUtteranceFeedClick(e) {
+  const btn = e.target.closest('[data-action="reassign-utterance"]');
+  if (!btn) return;
+  e.stopPropagation();
+  if (!reassignMenuEl.classList.contains("hidden") && reassignTargetUtteranceId === btn.dataset.utteranceId) {
+    closeReassignMenu();
+    return;
+  }
+  openReassignMenu(btn);
+}
+
+function openReassignMenu(triggerBtn) {
+  reassignTargetUtteranceId = triggerBtn.dataset.utteranceId;
+  const speakers = [...state.speakerStats.values()];
+  reassignMenuEl.innerHTML = speakers
+    .map(
+      (s) =>
+        `<button type="button" data-speaker-id="${s.speakerId}"><span class="reassign-dot" style="background:${getSpeakerColor(s.speakerId)}"></span>${escapeHtml(s.name)}</button>`,
+    )
+    .join("");
+  reassignMenuEl.classList.remove("hidden");
+  const rect = triggerBtn.getBoundingClientRect();
+  const menuWidth = reassignMenuEl.offsetWidth;
+  reassignMenuEl.style.top = `${rect.bottom + 4}px`;
+  reassignMenuEl.style.left = `${Math.max(8, rect.right - menuWidth)}px`;
+}
+
+function closeReassignMenu() {
+  reassignMenuEl.classList.add("hidden");
+  reassignTargetUtteranceId = null;
+}
+
 function openSpeakerMenu(triggerBtn) {
   menuTargetSpeakerId = triggerBtn.dataset.speakerId;
   speakerMenuEl.classList.remove("hidden");
@@ -1094,7 +1150,10 @@ function renderUtterances() {
       const lines = g.items
         .map((u) => {
           const sEmoji = u.sentiment === "positive" ? "😊" : u.sentiment === "negative" ? "😠" : "😐";
-          return `<p class="bubble-line"><span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span>${escapeHtml(u.transcript)}</p>`;
+          const reassignBtn = u.is_final
+            ? `<button type="button" class="reassign-btn" data-action="reassign-utterance" data-utterance-id="${u.id}" title="화자 변경">✎</button>`
+            : "";
+          return `<p class="bubble-line"><span class="sentiment-tag sentiment-${u.sentiment ?? "neutral"}">${sEmoji}</span><span class="bubble-text">${escapeHtml(u.transcript)}</span>${reassignBtn}</p>`;
         })
         .join("");
       return `<li class="bubble"><div class="bubble-header"><strong style="color:${color}">${escapeHtml(speakerName)}</strong> · ${(g.totalDuration / 1000).toFixed(1)}초 · ${g.items.length}건</div>${lines}</li>`;
