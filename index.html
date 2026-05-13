@@ -28,6 +28,94 @@
           <h2>회의 대기/입장</h2>
           <div class="form-grid">
             <label>
+              소속 팀
+              <select id="team-select">
+                <option value="">-- 팀 선택 (선택 시 회의 제목 자동 입력) --</option>
+                <optgroup label="기획총괄 · 기획관리실">
+                  <option>PMO팀</option>
+                  <option>CX팀</option>
+                </optgroup>
+                <optgroup label="기획총괄 · 사업기획실">
+                  <option>사업기획실</option>
+                </optgroup>
+                <optgroup label="기획총괄 · 전략지원팀">
+                  <option>전략지원팀</option>
+                </optgroup>
+                <optgroup label="기획총괄 · 제품기획실">
+                  <option>제품PO팀</option>
+                  <option>제품기술팀</option>
+                  <option>제품기획팀</option>
+                  <option>제품마케팅팀</option>
+                  <option>제품전략팀</option>
+                </optgroup>
+                <optgroup label="기획총괄 · 제품운영실">
+                  <option>제품PM1팀</option>
+                  <option>제품PM2팀</option>
+                  <option>제품UI팀</option>
+                  <option>제품기술콘텐츠팀</option>
+                  <option>제품화개발팀</option>
+                </optgroup>
+                <optgroup label="기획총괄 · 응용제품개발실">
+                  <option>문서뷰어개발팀</option>
+                  <option>보안인증개발팀</option>
+                  <option>오피스솔루션개발팀</option>
+                  <option>한글솔루션개발팀</option>
+                </optgroup>
+                <optgroup label="기획총괄 · AI솔루션개발실">
+                  <option>AIAgent개발팀</option>
+                  <option>AIHub개발팀</option>
+                  <option>SEMANTIX개발팀</option>
+                </optgroup>
+                <optgroup label="사업총괄 · 공공AI사업실">
+                  <option>공공팀</option>
+                  <option>기술지원팀</option>
+                  <option>컨설팅팀</option>
+                </optgroup>
+                <optgroup label="사업총괄 · 교육AI사업실">
+                  <option>교육1팀</option>
+                  <option>교육2팀</option>
+                </optgroup>
+                <optgroup label="사업총괄 · 기업AI사업실">
+                  <option>기업1팀</option>
+                  <option>기업2팀</option>
+                </optgroup>
+                <optgroup label="사업총괄">
+                  <option>사업지원팀</option>
+                </optgroup>
+                <optgroup label="개발총괄 · 미래기술개발실">
+                  <option>신규기술개발팀</option>
+                  <option>한글AI모델개발팀</option>
+                </optgroup>
+                <optgroup label="개발총괄 · 차세대한글개발실">
+                  <option>드로잉기술팀</option>
+                  <option>웹한글개발팀</option>
+                  <option>차세대엔진기술팀</option>
+                  <option>프레임워크기술팀</option>
+                  <option>한글개발팀</option>
+                </optgroup>
+                <optgroup label="개발총괄 · 기술응용개발실">
+                  <option>모바일개발팀</option>
+                  <option>오피스개발팀</option>
+                  <option>오픈기술생태계확산팀</option>
+                </optgroup>
+                <optgroup label="개발총괄 · 서비스개발실">
+                  <option>SRE팀</option>
+                  <option>서비스엔진개발팀</option>
+                  <option>서비스웹개발팀</option>
+                  <option>한컴타자개발팀</option>
+                </optgroup>
+                <optgroup label="개발총괄 · 품질보증실">
+                  <option>문서제품검증팀</option>
+                  <option>응용기술검증팀</option>
+                </optgroup>
+                <optgroup label="경영총괄 · 디지털혁신실">
+                  <option>DX운영팀</option>
+                  <option>IT인프라팀</option>
+                  <option>정보보호팀</option>
+                </optgroup>
+              </select>
+            </label>
+            <label>
               회의 제목
               <input id="meeting-title" type="text" value="주간 스프린트 회의" />
             </label>

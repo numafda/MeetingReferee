@@ -128,7 +128,8 @@ label {
   font-weight: 600;
 }
 
-input {
+input,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -136,6 +137,22 @@ input {
   color: var(--text);
   font: inherit;
   padding: 10px;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239cadcf' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+select option,
+select optgroup {
+  background: #0b1220;
+  color: var(--text);
 }
 
 .checkbox-row {
@@ -192,6 +209,7 @@ input {
   background: var(--ok);
   color: #0b1220;
 }
+
 
 .dot-live.is-paused {
   background: var(--warn);

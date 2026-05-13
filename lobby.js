@@ -55,6 +55,13 @@ function toggleTestModeInput() {
 testModeEl.addEventListener("change", toggleTestModeInput);
 toggleTestModeInput();
 
+document.getElementById("team-select").addEventListener("change", (e) => {
+  const team = e.target.value;
+  if (team) {
+    document.getElementById("meeting-title").value = `${team} 주간 회의`;
+  }
+});
+
 document.getElementById("start-meeting").addEventListener("click", async () => {
   const title = document.getElementById("meeting-title").value.trim() || "이름 없는 회의";
   const raw = document.getElementById("meeting-participants").value;
