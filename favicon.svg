@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#3b72f5"/>
+  <!-- Speech bubble left -->
+  <path d="M10 16 Q10 10 16 10 H36 Q42 10 42 16 V30 Q42 36 36 36 H28 L20 44 V36 H16 Q10 36 10 30 Z" fill="white" opacity="0.95"/>
+  <!-- Speech bubble right (smaller, overlapping) -->
+  <path d="M28 28 Q28 23 33 23 H48 Q53 23 53 28 V38 Q53 43 48 43 H44 L44 49 L38 43 H33 Q28 43 28 38 Z" fill="white" opacity="0.7"/>
+  <!-- Referee dot / whistle accent -->
+  <circle cx="21" cy="23" r="3" fill="#3b72f5"/>
+  <circle cx="30" cy="23" r="3" fill="#3b72f5"/>
+</svg>
