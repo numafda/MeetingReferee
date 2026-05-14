@@ -68,6 +68,8 @@ const state = {
   lastFinalUtterance: null,
   lastObservedFinalUtterance: null,
   recentFinalUtterances: [],
+  durationMin: 0,
+  overtimeNotified: false,
   testMode: false,
   testSourceId: null,
   testAudioBlob: null,
@@ -312,7 +314,7 @@ function getNextSpeakerId() {
   return `speaker_${maxIndex + 1}`;
 }
 
-async function startMeeting({ title, participantCount, testMode = false, testSourceId = null }) {
+async function startMeeting({ title, participantCount, durationMin = 0, testMode = false, testSourceId = null }) {
   if ("Notification" in window && Notification.permission === "default") {
     await Notification.requestPermission();
   }
@@ -325,6 +327,8 @@ async function startMeeting({ title, participantCount, testMode = false, testSou
     participants,
     startAt: Date.now(),
   };
+  state.durationMin = durationMin;
+  state.overtimeNotified = false;
   state.testMode = Boolean(testMode);
   state.testSourceId = String(testSourceId || "");
   state.speakerStats = createSpeakerStats(participants);
@@ -997,7 +1001,30 @@ function renderAll() {
 }
 
 function renderElapsed() {
-  el.elapsed.textContent = formatElapsed(state.meetingElapsedSec);
+  const elapsed = formatElapsed(state.meetingElapsedSec);
+  if (state.durationMin > 0) {
+    const totalSec = state.durationMin * 60;
+    const isOvertime = state.meetingElapsedSec >= totalSec;
+    if (isOvertime) {
+      const overSec = state.meetingElapsedSec - totalSec;
+      el.elapsed.textContent = `+${formatElapsed(overSec)} 초과`;
+      el.elapsed.classList.add("overtime");
+      if (!state.overtimeNotified) {
+        state.overtimeNotified = true;
+        showToast("warn", "⏰ 예정 시간 종료", "회의를 마무리할 시간입니다.");
+      }
+    } else {
+      const remainSec = totalSec - state.meetingElapsedSec;
+      el.elapsed.textContent = `${elapsed} / ${formatElapsed(totalSec)}`;
+      el.elapsed.classList.remove("overtime");
+      if (remainSec === 60) {
+        showToast("warn", "⏰ 1분 남았습니다", "회의를 마무리 단계로 이어가세요.");
+      }
+    }
+  } else {
+    el.elapsed.textContent = elapsed;
+    el.elapsed.classList.remove("overtime");
+  }
 }
 
 function renderActiveSpeaker() {

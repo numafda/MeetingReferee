@@ -124,6 +124,19 @@
               참여자 수
               <input id="meeting-participants" type="number" min="2" max="20" value="4" />
             </label>
+            <label>
+              예정 회의 시간
+              <select id="meeting-duration">
+                <option value="0">-- 설정 안 함 --</option>
+                <option value="15">15분</option>
+                <option value="20">20분</option>
+                <option value="30">30분</option>
+                <option value="45">45분</option>
+                <option value="60" selected>1시간</option>
+                <option value="90">1시간 30분</option>
+                <option value="120">2시간</option>
+              </select>
+            </label>
             <label class="checkbox-row">
               <input id="test-mode" type="checkbox" />
               <span>테스트 모드 (음성 파일 업로드)</span>

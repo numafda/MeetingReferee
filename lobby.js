@@ -66,6 +66,7 @@ document.getElementById("start-meeting").addEventListener("click", async () => {
   const title = document.getElementById("meeting-title").value.trim() || "이름 없는 회의";
   const raw = document.getElementById("meeting-participants").value;
   const participantCount = Math.min(Math.max(parseInt(raw, 10) || 2, 2), 20);
+  const durationMin = parseInt(document.getElementById("meeting-duration").value, 10) || 0;
   const testMode = testModeEl.checked;
   const testAudioFile = testAudioFileEl.files?.[0] ?? null;
 
@@ -92,7 +93,7 @@ document.getElementById("start-meeting").addEventListener("click", async () => {
 
   sessionStorage.setItem(
     "meetingConfig",
-    JSON.stringify({ title, participantCount, testMode, testSourceId: testSource?.id || null }),
+    JSON.stringify({ title, participantCount, durationMin, testMode, testSourceId: testSource?.id || null }),
   );
   window.location.href = "/dashboard.html";
 });

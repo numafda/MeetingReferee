@@ -286,6 +286,11 @@ select optgroup {
   letter-spacing: 0.03em;
 }
 
+.elapsed-clock.overtime {
+  color: var(--alert);
+  animation: pulse 1.4s infinite;
+}
+
 .meeting-layout {
   margin-top: 12px;
   display: grid;
